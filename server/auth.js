@@ -45,9 +45,46 @@ export async function attachAuth(c, next) {
 
 export function requireRole(...roles) {
   return async (c, next) => {
-    const user = c.get('user');
+    let user = c.get('user');
+    if (!user) {
+      // API key path: the key must carry the right scope for the action class.
+      const apiUser = c.get('apiUser');
+      if (apiUser) {
+        const scopes = String(c.get('apiKey')?.scopes || 'read').split(',');
+        const needsAdmin = roles.includes('admin') || roles.includes('moderator');
+        const needs = needsAdmin ? 'admin' : 'write';
+        if (scopes.includes(needs)) user = apiUser;
+      }
+    }
     if (!user) return c.json({ error: 'Sign in required' }, 401);
     if (!roles.includes(user.role)) return c.json({ error: 'Not allowed for your role' }, 403);
+    c.set('actor', user); // the effective user (session or key owner)
+    await next();
+  };
+}
+
+// Require a valid API key for a route (used to gate /v1/* mounts)
+export function requireApiKey() {
+  return async (c, next) => {
+    if (!c.get('apiKey')) {
+      return c.json({ error: 'Valid X-API-Key header required. Create one in the TLDB developer panel.' }, 401);
+    }
+    await next();
+  };
+}
+
+// Simple fixed-window rate limiter (per IP+key), shared by API mounts
+export function rateLimit(max = 120, windowSec = 60) {
+  const hits = new Map();
+  return async (c, next) => {
+    const id = c.get('apiKey')?.id || c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'anon';
+    const now = Date.now();
+    const w = Math.floor(now / (windowSec * 1000));
+    const rec = hits.get(id);
+    if (!rec || rec.window !== w) hits.set(id, { window: w, count: 1 });
+    else rec.count++;
+    if (hits.size > 5000) hits.clear();
+    if (hits.get(id).count > max) return c.json({ error: 'Rate limit exceeded — slow down' }, 429);
     await next();
   };
 }

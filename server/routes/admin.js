@@ -50,7 +50,7 @@ adminRoutes.post('/admin/feedback/:id', adminOnly, async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const status = ['resolved', 'dismissed', 'open'].includes(body.status) ? body.status : null;
   if (!status) return c.json({ error: 'Bad status' }, 400);
-  const admin = c.get('user');
+  const admin = c.get('user') || c.get('apiUser');
   await q.run(`UPDATE feedback SET status = ?, reviewer_id = ?, resolution_note = ?, reviewed_at = datetime('now') WHERE id = ?`,
     status, admin.id, String(body.note || ''), c.req.param('id'));
   return c.json({ ok: true });
@@ -82,7 +82,7 @@ async function uniqueSlug(base) {
 }
 
 adminRoutes.post('/admin/contributions/:id/approve', adminOnly, async (c) => {
-  const admin = c.get('user');
+  const admin = c.get('user') || c.get('apiUser');
   const cb = await q.get(`SELECT * FROM contributions WHERE id = ? AND status = 'pending'`, c.req.param('id'));
   if (!cb) return c.json({ error: 'Contribution not found or already reviewed' }, 404);
   const p = JSON.parse(cb.payload || '{}');
@@ -128,7 +128,7 @@ adminRoutes.post('/admin/contributions/:id/approve', adminOnly, async (c) => {
 });
 
 adminRoutes.post('/admin/contributions/:id/reject', adminOnly, async (c) => {
-  const admin = c.get('user');
+  const admin = c.get('user') || c.get('apiUser');
   const cb = await q.get(`SELECT * FROM contributions WHERE id = ? AND status = 'pending'`, c.req.param('id'));
   if (!cb) return c.json({ error: 'Contribution not found or already reviewed' }, 404);
   const body = await c.req.json().catch(() => ({}));
@@ -150,7 +150,7 @@ adminRoutes.post('/admin/users/:id/role', requireRole('admin'), async (c) => {
 });
 
 adminRoutes.post('/admin/users/:id/status', requireRole('admin'), async (c) => {
-  const admin = c.get('user');
+  const admin = c.get('user') || c.get('apiUser');
   const body = await c.req.json().catch(() => ({}));
   const status = String(body.status || '');
   if (!['active', 'banned'].includes(status)) return c.json({ error: 'Bad status' }, 400);

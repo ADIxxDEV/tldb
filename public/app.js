@@ -30,7 +30,7 @@ function renderNav() {
   $('#topnav').innerHTML = `
     <a href="#/browse" data-nav="browse">Catalog</a>
     <a href="#/subjects" data-nav="subjects">Subjects</a>
-    ${u ? '<a href="#/watchlist" data-nav="watchlist">My list</a><a href="#/contribute" data-nav="contribute">Contribute</a><a href="#/keys" data-nav="keys">API keys</a>' : ''}
+    ${u ? '<a href="#/watchlist" data-nav="watchlist">My list</a><a href="#/contribute" data-nav="contribute">Contribute</a><a href="#/keys" data-nav="keys">API keys</a><a href="#/account" data-nav="account">Account</a>' : ''}
     ${u && (u.role === 'admin' || u.role === 'moderator') ? '<a href="#/admin" data-nav="admin">Admin</a>' : ''}
     ${u
       ? `<span class="who">${esc(u.name)} · ${u.role}</span><a href="#" id="logout">Sign out</a>`

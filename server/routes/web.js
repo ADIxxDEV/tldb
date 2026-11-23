@@ -62,6 +62,18 @@ webRoutes.post('/auth/login', async (c) => {
   return c.json({ user: publicUser(u) });
 });
 
+webRoutes.post('/auth/change-password', requireRole('student', 'contributor', 'moderator', 'admin'), async (c) => {
+  const user = c.get('user');
+  const b = await c.req.json().catch(() => ({}));
+  const current = String(b.current || ''), next = String(b.next || '');
+  if (next.length < 8) return c.json({ error: 'New password must be at least 8 characters' }, 400);
+  const row = await q.get(`SELECT password_hash FROM users WHERE id = ?`, user.id);
+  if (!(await verifyPassword(current, row.password_hash))) return c.json({ error: 'Current password is wrong' }, 403);
+  await q.run(`UPDATE users SET password_hash = ? WHERE id = ?`, await hashPassword(next), user.id);
+  await q.run(`DELETE FROM sessions WHERE user_id = ? AND token != ?`, user.id, c.get('sessionToken') || '');
+  return c.json({ ok: true, message: 'Password changed — other sessions signed out' });
+});
+
 webRoutes.post('/auth/logout', async (c) => {
   await destroySession(c.get('sessionToken'));
   deleteCookie(c, 'tldb_session', { path: '/' });
@@ -265,8 +277,10 @@ webRoutes.get('/courses/:slug', async (c) => {
 });
 
 // ---------- feedback: report issues / suggest edits ----------
-webRoutes.post('/feedback', requireRole('student', 'contributor', 'moderator', 'admin'), async (c) => {
-  const user = c.get('user');
+// shared handler used by both the web UI (/api) and the keyed API (/v1)
+export async function submitFeedback(c) {
+  const user = c.get('user') || c.get('apiUser');
+  if (!user) return c.json({ error: 'Sign in required' }, 401);
   const b = await c.req.json().catch(() => ({}));
   const message = String(b.message || '').trim();
   const type = ['report', 'edit', 'other'].includes(b.type) ? b.type : 'report';
@@ -278,7 +292,8 @@ webRoutes.post('/feedback', requireRole('student', 'contributor', 'moderator', '
   await q.run(`INSERT INTO feedback (user_id, lecture_id, educator_id, company_id, type, message) VALUES (?,?,?,?,?,?)`,
     user.id, lecture_id, educator_id, company_id, type, message);
   return c.json({ ok: true, status: 'Thanks — an admin will review it.' });
-});
+}
+webRoutes.post('/feedback', submitFeedback);
 
 // ---------- educators & companies (public pages) ----------
 webRoutes.get('/educators/:slug', async (c) => {
@@ -298,8 +313,10 @@ webRoutes.get('/companies/:slug', async (c) => {
 // ---------- contribution panel ----------
 const SOURCE_TYPES = ['youtube', 'archive', 'torrent', 'file', 'stream', 'other'];
 
-webRoutes.post('/contributions', requireRole('contributor', 'moderator', 'admin'), async (c) => {
-  const user = c.get('user');
+// shared handler used by both the web UI (/api) and the keyed API (/v1)
+export async function submitContribution(c) {
+  const user = c.get('user') || c.get('apiUser');
+  if (!user) return c.json({ error: 'Sign in required' }, 401);
   const b = await c.req.json().catch(() => ({}));
   const errs = [];
   if (!String(b.title || '').trim() && !String(b.educator_name || '').trim()) errs.push('give the lecture a title or at least an educator name');
@@ -328,7 +345,8 @@ webRoutes.post('/contributions', requireRole('contributor', 'moderator', 'admin'
   const info = await q.run(`INSERT INTO contributions (user_id, action, payload) VALUES (?,?,?)`,
     user.id, 'submit_lecture', JSON.stringify(payload));
   return c.json({ ok: true, contribution_id: info.lastInsertRowid, status: 'pending' });
-});
+}
+webRoutes.post('/contributions', submitContribution);
 
 webRoutes.get('/contributions/mine', requireRole('contributor', 'moderator', 'admin'), async (c) => {
   const user = c.get('user');
@@ -358,7 +376,7 @@ webRoutes.post('/keys', requireRole('student', 'contributor', 'moderator', 'admi
   const b = await c.req.json().catch(() => ({}));
   const name = String(b.name || '').trim();
   if (!name) return c.json({ error: 'Give the key a name' }, 400);
-  const scopes = user.role === 'student' ? 'read' : 'read,write';
+  const scopes = user.role === 'admin' ? 'read,write,admin' : user.role === 'student' ? 'read' : 'read,write';
   const key = await newApiKey(user.id, name, scopes);
   return c.json({ key, note: 'Copy it now — it is stored hashed and cannot be shown again.' });
 });

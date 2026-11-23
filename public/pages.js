@@ -148,9 +148,14 @@ VIEWS.docs = async (el) => {
         <tr><td class="mono">GET /v1/lectures/:id</td><td>One record by public ID, e.g. <span class="mono">LC-000001</span></td></tr>
         <tr><td class="mono">GET /v1/educators</td><td>All educators with lecture counts</td></tr>
         <tr><td class="mono">GET /v1/companies</td><td>All companies / rights holders with counts</td></tr>
+        <tr><td class="mono">POST /v1/lectures</td><td><b>write scope</b> — submit a lecture for review (same fields as the contribute form; goes to the admin queue)</td></tr>
+        <tr><td class="mono">POST /v1/feedback</td><td>File a report / edit suggestion / other feedback (<span class="mono">type, message, lecture_slug</span>)</td></tr>
+        <tr><td class="mono">GET /v1/contributions/mine</td><td><b>write scope</b> — your own submissions and their review status</td></tr>
+        <tr><td class="mono">/v1/admin/*</td><td><b>admin scope</b> — the full admin API: queue, approve/reject, users, courses, feedback desk, feature toggles (admin accounts only)</td></tr>
         <tr><td class="mono">GET /api/health</td><td>Service health check (no key needed)</td></tr>
       </table>
       <div class="notice">Example — search the record:<div class="keyreveal">curl -H "X-API-Key: tldb_…" https://YOUR-DOMAIN/v1/lectures?query=algorithms</div></div>
+      <div class="notice">Example — submit a lecture (write scope):<div class="keyreveal">curl -X POST -H "X-API-Key: tldb_…" -H "Content-Type: application/json" -d '{"title":"…","educator_name":"…","source_type":"youtube","source_url":"…"}' https://YOUR-DOMAIN/v1/lectures</div></div>
       <div class="notice">Every record carries its <b>source</b> (YouTube, Internet Archive, torrent/magnet, file, stream)
       and <b>rights holder</b>. TLDB hosts nothing — clients resolve and play from the source.</div>
     </div>`;

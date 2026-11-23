@@ -109,6 +109,30 @@ VIEWS.contribute = async (el) => {
 };
 
 // ---------- API keys ----------
+VIEWS.account = async (el) => {
+  if (!state.user) { el.innerHTML = `<div class="empty"><a href="#/login">Sign in</a> to manage your account.</div>`; return; }
+  el.innerHTML = `
+    <div class="panel"><h2>Account</h2>
+      <div class="kv" style="max-width:420px">
+        <dt>signed in as</dt><dd>${esc(state.user.name)} <span class="mono muted">${esc(state.user.email)}</span></dd>
+        <dt>role</dt><dd><span class="badge sage">${esc(state.user.role)}</span></dd>
+      </div>
+      <h3 style="margin-top:20px">Change password</h3>
+      <form id="cpf" class="stack" style="max-width:360px">
+        <div><label class="f" for="cp0">Current password</label><input class="plain" type="password" id="cp0" required autocomplete="current-password"></div>
+        <div><label class="f" for="cp1">New password (min 8 characters)</label><input class="plain" type="password" id="cp1" required minlength="8" autocomplete="new-password"></div>
+        <button class="btn primary" type="submit">Change password</button>
+      </form>
+    </div>`;
+  $('#cpf').onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const r = await api('/auth/change-password', { method: 'POST', body: { current: e.target.cp0.value, next: e.target.cp1.value } });
+      toast(r.message || 'Password changed'); e.target.reset();
+    } catch (err) { toast(err.message, true); }
+  };
+};
+
 VIEWS.keys = async (el) => {
   if (!state.user) { el.innerHTML = `<div class="empty"><a href="#/login">Sign in</a> to manage API keys.</div>`; return; }
   const data = await api('/keys');

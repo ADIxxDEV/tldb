@@ -51,7 +51,7 @@ function catalogRows(lectures, showViews = false) {
       <span class="rid">${esc(l.public_id || 'pending')}</span>
       <div>
         <a class="rtitle" href="#/lecture/${esc(l.slug)}">${esc(l.title)}</a>
-        <div class="rmeta">${esc(l.educator_name || 'Unknown educator')}${l.year ? ' · ' + l.year : ''}${l.subject ? ' · ' + esc(l.subject) : ''} · ▲ ${l.likes} ▼ ${l.dislikes}${viewsLabel ? ` · <span class="hot">${viewsLabel}</span>` : ''}</div>
+        <div class="rmeta">${esc(l.educator_name || 'Unknown educator')}${l.year ? ' · ' + l.year : ''}${l.subject ? ' · ' + esc(l.subject) : ''} · ▲ ${l.likes} ▼ ${l.dislikes}${viewsLabel ? ` · <span class="hot">${viewsLabel}</span>` : ''}${l.hidden ? ' · <span class="badge red">unlisted</span>' : ''}</div>
       </div>
       <span class="rsrc">${esc(l.source_type)}</span>
     </div>`;
@@ -97,7 +97,31 @@ function strip(items, renderer) {
   return `<div class="strip">${items.map(renderer).join('')}</div>`;
 }
 
+// ---------- skeleton loading placeholders ----------
+function skelRow() {
+  return `<div class="skel-row"><span class="skel skel-id">&nbsp;</span>
+    <div class="skel-main"><div class="skel skel-line">&nbsp;</div><div class="skel skel-line w60">&nbsp;</div></div>
+    <span class="skel skel-src">&nbsp;</span></div>`;
+}
+function skeleton(kind) {
+  if (kind === 'home') return `
+    <div class="skel-hero"><div>
+      <div class="skel skel-line w40">&nbsp;</div><div class="skel skel-title">&nbsp;</div>
+      <div class="skel skel-line w80">&nbsp;</div><div class="skel skel-line w60">&nbsp;</div>
+      <div class="skel skel-block" style="height:38px;width:170px">&nbsp;</div>
+    </div><div class="skel skel-poster">&nbsp;</div></div>
+    <div class="skel skel-title" style="width:30%">&nbsp;</div>
+    ${skelRow().repeat(4)}`;
+  if (kind === 'record') return `
+    <div class="skel skel-line w40">&nbsp;</div><div class="skel skel-title">&nbsp;</div>
+    <div class="skel-kv">${'<div class="skel skel-line w40">&nbsp;</div><div class="skel skel-line">&nbsp;</div>'.repeat(5)}</div>
+    ${skelRow().repeat(2)}`;
+  if (kind === 'strip') return `<div class="skel-strip">${'<div class="skel skel-card">&nbsp;</div>'.repeat(5)}</div>`;
+  return skelRow().repeat(6);
+}
+
 VIEWS.home = async (el) => {
+  el.innerHTML = skeleton('home');
   const [home, me] = await Promise.all([api('/home'), api('/auth/me')]);
   state.user = me.user; renderNav();
   const f = home.featured;
@@ -169,6 +193,7 @@ VIEWS.browse = async (el, params, query) => {
     educator: query.get('educator') || '',
   };
   const page = Number(query.get('page') || 1);
+  el.innerHTML = skeleton('rows');
   const [data, meta] = await Promise.all([
     api('/lectures?' + new URLSearchParams({ query: q, ...cur, page }).toString()),
     api('/meta'),
@@ -217,6 +242,7 @@ VIEWS.browse = async (el, params, query) => {
 // ---------- lecture record ----------
 VIEWS.lecture = async (el, params) => {
   let data;
+  el.innerHTML = skeleton('record');
   try { data = await api('/lectures/' + encodeURIComponent(params.slug)); }
   catch (e) { el.innerHTML = `<div class="empty">${esc(e.message)}. <a href="#/browse">Back to the catalog</a>.</div>`; return; }
   const l = data.lecture;
@@ -345,6 +371,7 @@ function bindFeedback(kind, slug) {
 // ---------- course / playlist page (numbered like episodes) ----------
 VIEWS.course = async (el, params) => {
   let data;
+  el.innerHTML = skeleton('record');
   try { data = await api('/courses/' + encodeURIComponent(params.slug)); }
   catch (e) { VIEWS.notfound(el); return; }
   const co = data.course;
@@ -424,7 +451,7 @@ async function route() {
 }
 
 window.addEventListener('hashchange', route);
-window.addEventListener('DOMContentLoaded', async () => {
-  try { state.user = (await api('/auth/me')).user; } catch { state.user = null; }
-  route();
+window.addEventListener('DOMContentLoaded', () => {
+  route(); // render immediately — views show skeleton placeholders while data loads
+  api('/auth/me').then(r => { state.user = r.user; renderNav(); }).catch(() => {});
 });

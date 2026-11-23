@@ -93,7 +93,7 @@ webRoutes.post('/auth/request-contributor', requireRole('student', 'contributor'
 
 // ---------- home page aggregate ----------
 webRoutes.get('/home', async (c) => {
-  const featured = await q.all(`${LECTURE_SELECT} WHERE l.status = 'published' AND l.featured = 1 ORDER BY l.published_at DESC LIMIT 3`);
+  const featured = await q.all(`${LECTURE_SELECT} WHERE l.status = 'published' AND l.hidden = 0 AND l.featured = 1 ORDER BY l.published_at DESC LIMIT 3`);
   const week = await q.all(
     `SELECT l.id, SUM(v.count) AS week_views FROM view_log v JOIN lectures l ON l.id = v.lecture_id
      WHERE v.day >= date('now', '-7 days') AND l.status = 'published' GROUP BY l.id ORDER BY week_views DESC LIMIT 8`);
@@ -104,8 +104,8 @@ webRoutes.get('/home', async (c) => {
     const byId = Object.fromEntries(rows.map(r => [r.id, r]));
     trending = week.map(w => ({ ...byId[w.id], week_views: w.week_views })).filter(r => r.id);
   }
-  const top = await q.all(`${LECTURE_SELECT} WHERE l.status = 'published' ORDER BY (l.likes * 3 + l.views) DESC, l.published_at DESC LIMIT 8`);
-  const recent = await q.all(`${LECTURE_SELECT} WHERE l.status = 'published' ORDER BY l.published_at DESC LIMIT 8`);
+  const top = await q.all(`${LECTURE_SELECT} WHERE l.status = 'published' AND l.hidden = 0 ORDER BY (l.likes * 3 + l.views) DESC, l.published_at DESC LIMIT 8`);
+  const recent = await q.all(`${LECTURE_SELECT} WHERE l.status = 'published' AND l.hidden = 0 ORDER BY l.published_at DESC LIMIT 8`);
   const educators = await q.all(
     `SELECT e.slug, e.name, e.image_url, COUNT(l.id) AS lectures, COALESCE(SUM(l.likes),0) AS likes
      FROM educators e JOIN lectures l ON l.educator_id = e.id AND l.status = 'published'
@@ -115,7 +115,7 @@ webRoutes.get('/home', async (c) => {
      FROM companies c JOIN lectures l ON l.company_id = c.id AND l.status = 'published'
      GROUP BY c.id ORDER BY lectures DESC, c.name LIMIT 12`);
   const monthTop = await q.all(
-    `${LECTURE_SELECT} WHERE l.status = 'published' ORDER BY ${MONTH_VIEWS} DESC, (l.likes * 3 + l.views) DESC LIMIT 8`);
+    `${LECTURE_SELECT} WHERE l.status = 'published' AND l.hidden = 0 ORDER BY ${MONTH_VIEWS} DESC, (l.likes * 3 + l.views) DESC LIMIT 8`);
   const courses = await q.all(
     `SELECT co.id, co.slug, co.title, co.year, e.name AS educator_name,
             COUNT(l.id) AS lecture_count
@@ -128,7 +128,7 @@ webRoutes.get('/home', async (c) => {
      GROUP BY subject ORDER BY count DESC LIMIT 12`);
   const countries = await q.all(
     `SELECT DISTINCT country FROM (SELECT country FROM educators WHERE country != '' UNION SELECT country FROM companies WHERE country != '') ORDER BY country`);
-  const total = (await q.get(`SELECT COUNT(*) AS n FROM lectures WHERE status = 'published'`)).n;
+  const total = (await q.get(`SELECT COUNT(*) AS n FROM lectures WHERE status = 'published' AND hidden = 0`)).n;
   const educatorCount = (await q.get(`SELECT COUNT(*) AS n FROM educators`)).n;
   const companyCount = (await q.get(`SELECT COUNT(*) AS n FROM companies`)).n;
   return c.json({ featured, trending, monthTop, top, recent, educators, companies, courses, subjects, countries,
@@ -145,6 +145,8 @@ webRoutes.get('/lectures', async (c) => {
   const page = Number(c.req.query('page')) || 1;
   const where = [`l.status = 'published'`];
   const params = [];
+  // hidden records stay off the listings — they only surface when actively searched
+  if (!query) where.push(`l.hidden = 0`);
   if (query) { where.push(`(l.title LIKE ? OR l.description LIKE ? OR l.tags LIKE ? OR l.batch_name LIKE ?)`); const like = `%${query}%`; params.push(like, like, like, like); }
   if (subject) { where.push(`l.subject LIKE ?`); params.push(`%${subject}%`); }
   if (source) { where.push(`l.source_type = ?`); params.push(source); }
@@ -163,9 +165,9 @@ webRoutes.get('/lectures', async (c) => {
 // filter metadata for the browse bar
 webRoutes.get('/meta', async (c) => {
   const countries = await q.all(`SELECT DISTINCT country FROM (SELECT country FROM educators WHERE country != '' UNION SELECT country FROM companies WHERE country != '') ORDER BY country`);
-  const languages = await q.all(`SELECT language, COUNT(*) AS count FROM lectures WHERE status = 'published' GROUP BY language ORDER BY count DESC`);
-  const batches = await q.all(`SELECT batch_name, COUNT(*) AS count FROM lectures WHERE status = 'published' AND batch_name != '' GROUP BY batch_name ORDER BY count DESC LIMIT 50`);
-  const subjects = await q.all(`SELECT subject, COUNT(*) AS count FROM lectures WHERE status = 'published' AND subject != '' GROUP BY subject ORDER BY count DESC`);
+  const languages = await q.all(`SELECT language, COUNT(*) AS count FROM lectures WHERE status = 'published' AND hidden = 0 GROUP BY language ORDER BY count DESC`);
+  const batches = await q.all(`SELECT batch_name, COUNT(*) AS count FROM lectures WHERE status = 'published' AND hidden = 0 AND batch_name != '' GROUP BY batch_name ORDER BY count DESC LIMIT 50`);
+  const subjects = await q.all(`SELECT subject, COUNT(*) AS count FROM lectures WHERE status = 'published' AND hidden = 0 AND subject != '' GROUP BY subject ORDER BY count DESC`);
   return c.json({ countries: countries.map(r => r.country), languages, batches, subjects });
 });
 
@@ -180,7 +182,7 @@ webRoutes.get('/lectures/:slug', async (c) => {
   const course = l.course_id ? await q.get(`SELECT slug, title FROM courses WHERE id = ?`, l.course_id) : null;
   // related: same educator first, then same subject, exclude self
   const related = await q.all(
-    `${LECTURE_SELECT} WHERE l.status = 'published' AND l.id != ?
+    `${LECTURE_SELECT} WHERE l.status = 'published' AND l.hidden = 0 AND l.id != ?
        AND (l.educator_id = ? OR (l.subject != '' AND l.subject = ?))
      ORDER BY (l.educator_id = ?) DESC, l.published_at DESC LIMIT 6`,
     l.id, l.educator_id || -1, l.subject || '\u0000', l.educator_id || -1);
@@ -272,7 +274,7 @@ webRoutes.get('/courses/:slug', async (c) => {
      WHERE co.slug = ?`, c.req.param('slug'));
   if (!co) return c.json({ error: 'Course not found' }, 404);
   const lectures = await q.all(
-    `${LECTURE_SELECT} WHERE l.status = 'published' AND l.course_id = ? ORDER BY COALESCE(l.position, 9999), l.published_at`, co.id);
+    `${LECTURE_SELECT} WHERE l.status = 'published' AND l.hidden = 0 AND l.course_id = ? ORDER BY COALESCE(l.position, 9999), l.published_at`, co.id);
   return c.json({ course: co, lectures });
 });
 
@@ -299,14 +301,14 @@ webRoutes.post('/feedback', submitFeedback);
 webRoutes.get('/educators/:slug', async (c) => {
   const e = await q.get(`SELECT * FROM educators WHERE slug = ?`, c.req.param('slug'));
   if (!e) return c.json({ error: 'Educator not found' }, 404);
-  const lectures = await q.all(`${LECTURE_SELECT} WHERE l.status = 'published' AND l.educator_id = ? ORDER BY l.published_at DESC`, e.id);
+  const lectures = await q.all(`${LECTURE_SELECT} WHERE l.status = 'published' AND l.hidden = 0 AND l.educator_id = ? ORDER BY l.published_at DESC`, e.id);
   return c.json({ educator: e, lectures });
 });
 
 webRoutes.get('/companies/:slug', async (c) => {
   const co = await q.get(`SELECT * FROM companies WHERE slug = ?`, c.req.param('slug'));
   if (!co) return c.json({ error: 'Company not found' }, 404);
-  const lectures = await q.all(`${LECTURE_SELECT} WHERE l.status = 'published' AND l.company_id = ? ORDER BY l.published_at DESC`, co.id);
+  const lectures = await q.all(`${LECTURE_SELECT} WHERE l.status = 'published' AND l.hidden = 0 AND l.company_id = ? ORDER BY l.published_at DESC`, co.id);
   return c.json({ company: co, lectures });
 });
 

@@ -248,6 +248,37 @@ select.filter { width: auto; padding: 8px 12px; font-size: 13.5px; margin: 0; }
 
 /* like ratio bar end */
 
+/* skeleton loading placeholders */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skel {
+  background: linear-gradient(90deg, var(--panel) 25%, #2b3440 50%, var(--panel) 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: 4px;
+  color: transparent !important;
+  user-select: none;
+  pointer-events: none;
+}
+.skel-line { height: 13px; margin: 7px 0; }
+.skel-line.w60 { width: 60%; } .skel-line.w40 { width: 40%; } .skel-line.w80 { width: 80%; }
+.skel-title { height: 26px; width: 55%; margin: 10px 0; }
+.skel-block { height: 120px; margin: 14px 0; border-radius: 8px; }
+.skel-row { display: grid; grid-template-columns: 92px 1fr 70px; gap: 14px; align-items: center; padding: 13px 0; border-bottom: 1px solid var(--line); }
+.skel-row .skel-id { height: 15px; width: 84px; }
+.skel-row .skel-main .skel-line:first-child { height: 16px; width: 62%; }
+.skel-row .skel-src { height: 15px; width: 58px; justify-self: end; }
+.skel-hero { display: grid; grid-template-columns: 1.4fr 1fr; gap: 28px; margin: 22px 0; }
+.skel-hero .skel-poster { height: 240px; border-radius: 10px; }
+.skel-kv { display: grid; grid-template-columns: 130px 1fr; gap: 8px 18px; margin: 16px 0; }
+.skel-kv .skel-line { margin: 0; }
+.skel-strip { display: grid; grid-auto-flow: column; grid-auto-columns: 168px; gap: 14px; overflow: hidden; margin: 14px 0; }
+.skel-strip .skel-card { height: 92px; border-radius: 8px; }
+
+/* skeleton loading placeholders end */
+
 /* toast */
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);

@@ -245,9 +245,17 @@ adminRoutes.post('/admin/lectures/:id/source-status', adminOnly, async (c) => {
   return c.json({ ok: true, source_status: status });
 });
 
+// hide / unhide: hidden records leave the dashboard & listings, found only via search or direct link
+adminRoutes.post('/admin/lectures/:id/hide', adminOnly, async (c) => {
+  const b = await c.req.json().catch(() => ({}));
+  const hidden = b.hidden ? 1 : 0;
+  await q.run(`UPDATE lectures SET hidden = ?, featured = CASE WHEN ? = 1 THEN 0 ELSE featured END WHERE id = ?`, hidden, hidden, c.req.param('id'));
+  return c.json({ ok: true, hidden: !!hidden });
+});
+
 adminRoutes.get('/admin/lectures', adminOnly, async (c) => {
   return c.json({ lectures: await q.all(
-    `SELECT id, public_id, title, slug, featured, likes, views, status, source_status FROM lectures ORDER BY id DESC LIMIT 100`) });
+    `SELECT id, public_id, title, slug, featured, hidden, likes, views, status, source_status FROM lectures ORDER BY id DESC LIMIT 100`) });
 });
 
 adminRoutes.get('/admin/keys', adminOnly, async (c) => {

@@ -234,12 +234,13 @@ VIEWS.admin = async (el) => {
     </div>
     <div class="panel"><h2>Catalog — featured picks</h2>
       <p class="muted" style="font-size:13px">Featured records appear in the home page hero. Toggle below.</p>
-      <table class="grid"><tr><th>ID</th><th>Title</th><th>Likes</th><th>Views</th><th>Source</th><th>Featured</th></tr>
+      <table class="grid"><tr><th>ID</th><th>Title</th><th>Likes</th><th>Views</th><th>Source</th><th>Featured</th><th>Visibility</th></tr>
         ${catalog.lectures.map(l => `<tr><td class="mono">${esc(l.public_id)}</td>
-          <td><a href="#/lecture/${esc(l.slug)}">${esc(l.title)}</a></td>
+          <td><a href="#/lecture/${esc(l.slug)}">${esc(l.title)}</a>${l.hidden ? ' <span class="badge red">unlisted</span>' : ''}</td>
           <td class="mono">${l.likes}</td><td class="mono">${l.views}</td>
           <td>${l.source_status === 'dead' ? `<button class="btn small" data-src="${l.id}">Mark alive</button>` : `<button class="btn small danger" data-src="${l.id}">Mark dead</button>`}</td>
-          <td><button class="btn small ${l.featured ? 'primary' : ''}" data-feat="${l.id}">${l.featured ? '★ Featured' : 'Feature'}</button></td></tr>`).join('')}</table>
+          <td><button class="btn small ${l.featured ? 'primary' : ''}" data-feat="${l.id}">${l.featured ? '★ Featured' : 'Feature'}</button></td>
+          <td><button class="btn small ${l.hidden ? '' : 'danger'}" data-hide="${l.id}">${l.hidden ? 'Unhide' : 'Hide'}</button></td></tr>`).join('')}</table>
     </div>
     <div class="panel"><h2>Users</h2><div id="usersBox"><div class="empty">Loading…</div></div></div>`;
   el.querySelectorAll('.queue-item[data-fid]').forEach(item => {
@@ -274,6 +275,11 @@ VIEWS.admin = async (el) => {
   });
   el.querySelectorAll('[data-feat]').forEach(b => b.onclick = async () => {
     await api(`/admin/lectures/${b.dataset.feat}/feature`, { method: 'POST', body: {} }); VIEWS.admin(el);
+  });
+  el.querySelectorAll('[data-hide]').forEach(b => b.onclick = async () => {
+    const hide = !b.textContent.includes('Unhide');
+    await api(`/admin/lectures/${b.dataset.hide}/hide`, { method: 'POST', body: { hidden: hide } });
+    toast(hide ? 'Hidden — off the dashboard, findable only via search' : 'Visible again'); VIEWS.admin(el);
   });
   $('#courseForm').onsubmit = async (e) => {
     e.preventDefault();

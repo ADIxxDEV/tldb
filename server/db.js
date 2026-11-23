@@ -83,6 +83,7 @@ export const SCHEMA_STATEMENTS = [
   subject TEXT DEFAULT '',
   tags TEXT DEFAULT '[]',
   batch_name TEXT DEFAULT '',               -- original batch/cohort the lecture came from
+  hidden INTEGER DEFAULT 0,                 -- 1 = unlisted: off the dashboard, found only via search/direct link
   year INTEGER,
   status TEXT NOT NULL DEFAULT 'pending',
   featured INTEGER DEFAULT 0,
@@ -169,23 +170,29 @@ let schemaReady = false;
 
 export async function ensureSchema() {
   if (schemaReady) return;
-  if (mode === 'libsql') {
-    await client.execute('PRAGMA journal_mode = WAL;');
-    // light migrations for pre-existing local DBs
-    const addCols = [
-      ['educators', 'image_url', "TEXT DEFAULT ''"],
-      ['companies', 'domain', "TEXT DEFAULT ''"],
-      ['lectures', 'featured', 'INTEGER DEFAULT 0'],
-      ['educators', 'country', "TEXT DEFAULT ''"],
-      ['companies', 'country', "TEXT DEFAULT ''"],
-      ['lectures', 'course_id', 'INTEGER'],
-      ['lectures', 'position', 'INTEGER'],
-      ['lectures', 'source_status', "TEXT DEFAULT 'ok'"],
-      ['lectures', 'batch_name', "TEXT DEFAULT ''"],
-    ];
-    for (const [table, col, def] of addCols) {
-      const cols = (await client.execute(`PRAGMA table_info(${table})`)).rows.map(r => r.name);
-      if (cols.length && !cols.includes(col)) await client.execute(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+  if (mode === 'libsql') await client.execute('PRAGMA journal_mode = WAL;');
+  // light migrations for pre-existing databases (local AND remote D1)
+  const addCols = [
+    ['educators', 'image_url', "TEXT DEFAULT ''"],
+    ['companies', 'domain', "TEXT DEFAULT ''"],
+    ['lectures', 'featured', 'INTEGER DEFAULT 0'],
+    ['educators', 'country', "TEXT DEFAULT ''"],
+    ['companies', 'country', "TEXT DEFAULT ''"],
+    ['lectures', 'course_id', 'INTEGER'],
+    ['lectures', 'position', 'INTEGER'],
+    ['lectures', 'source_status', "TEXT DEFAULT 'ok'"],
+    ['lectures', 'batch_name', "TEXT DEFAULT ''"],
+    ['lectures', 'hidden', 'INTEGER DEFAULT 0'],
+  ];
+  for (const [table, col, def] of addCols) {
+    const info = mode === 'd1'
+      ? await client.prepare(`PRAGMA table_info(${table})`).all()
+      : (await client.execute(`PRAGMA table_info(${table})`)).rows;
+    const cols = info.map(r => r.name);
+    if (cols.length && !cols.includes(col)) {
+      const stmt = `ALTER TABLE ${table} ADD COLUMN ${col} ${def}`;
+      if (mode === 'd1') await client.prepare(stmt).run();
+      else await client.execute(stmt);
     }
   }
   for (const stmt of SCHEMA_STATEMENTS) {

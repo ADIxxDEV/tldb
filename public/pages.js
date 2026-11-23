@@ -3,6 +3,7 @@
 
 // ---------- educator page (like an IMDb name page) ----------
 VIEWS.educator = async (el, params) => {
+  el.innerHTML = skeleton('record');
   let data;
   try { data = await api('/educators/' + encodeURIComponent(params.slug)); }
   catch (e) { el.innerHTML = `<div class="empty">${esc(e.message)}. <a href="#/">Back to the record</a>.</div>`; return; }
@@ -34,6 +35,7 @@ VIEWS.educator = async (el, params) => {
 
 // ---------- company page ----------
 VIEWS.company = async (el, params) => {
+  el.innerHTML = skeleton('record');
   let data;
   try { data = await api('/companies/' + encodeURIComponent(params.slug)); }
   catch (e) { el.innerHTML = `<div class="empty">${esc(e.message)}. <a href="#/">Back to the record</a>.</div>`; return; }
@@ -66,6 +68,7 @@ VIEWS.company = async (el, params) => {
 // ---------- watchlist ----------
 VIEWS.watchlist = async (el) => {
   if (!state.user) { el.innerHTML = `<div class="empty"><a href="#/login">Sign in</a> to build your list.</div>`; return; }
+  el.innerHTML = skeleton('rows');
   const data = await api('/watchlist');
   el.innerHTML = `
     <div class="section-head" style="margin-top:0"><h2>My list</h2><span class="muted">${data.lectures.length} saved</span></div>
@@ -74,6 +77,7 @@ VIEWS.watchlist = async (el) => {
 
 // ---------- subjects ----------
 VIEWS.subjects = async (el) => {
+  el.innerHTML = skeleton('strip');
   const home = await api('/home');
   el.innerHTML = `
     <div class="section-head" style="margin-top:0"><h2>Subjects</h2><span class="muted">${home.subjects.length} on record</span></div>

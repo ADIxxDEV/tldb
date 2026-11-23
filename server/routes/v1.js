@@ -24,7 +24,7 @@ v1Routes.use('*', async (c, next) => {
 
 const SELECT = `
   SELECT l.public_id, l.title, l.slug, l.description, l.source_type, l.source_url,
-         l.duration_sec, l.language, l.subject, l.tags, l.year, l.likes, l.dislikes, l.views,
+         l.duration_sec, l.language, l.subject, l.tags, l.year, l.likes, l.dislikes, l.views, l.hidden,
          l.published_at, e.name AS educator, e.slug AS educator_slug,
          c.name AS company, c.slug AS company_slug, l.rights_holder
   FROM lectures l
@@ -38,6 +38,8 @@ v1Routes.get('/lectures', async (c) => {
   const limit = Math.min(Math.max(Number(c.req.query('per')) || 50, 1), 100);
   const where = [`l.status = 'published'`];
   const params = [];
+  // hidden records stay off the public API listings — they surface only via search
+  if (!query) where.push(`l.hidden = 0`);
   if (query) { where.push(`(l.title LIKE ? OR l.description LIKE ? OR l.tags LIKE ?)`); const like = `%${query}%`; params.push(like, like, like); }
   if (subject) { where.push(`l.subject LIKE ?`); params.push(`%${subject}%`); }
   if (source) { where.push(`l.source_type = ?`); params.push(source); }

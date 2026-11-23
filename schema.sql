@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS lectures (
   subject TEXT DEFAULT '',
   tags TEXT DEFAULT '[]',
   batch_name TEXT DEFAULT '',               -- original batch/cohort the lecture came from
+  hidden INTEGER DEFAULT 0,                 -- 1 = unlisted: off the dashboard, found only via search/direct link
   year INTEGER,
   status TEXT NOT NULL DEFAULT 'pending',
   featured INTEGER DEFAULT 0,
@@ -128,3 +129,17 @@ CREATE TABLE IF NOT EXISTS feedback (
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_lectures_status_published ON lectures(status, published_at);
+CREATE INDEX IF NOT EXISTS idx_lectures_slug ON lectures(slug);
+CREATE INDEX IF NOT EXISTS idx_lectures_public_id ON lectures(public_id);
+CREATE INDEX IF NOT EXISTS idx_lectures_educator ON lectures(educator_id);
+CREATE INDEX IF NOT EXISTS idx_lectures_company ON lectures(company_id);
+CREATE INDEX IF NOT EXISTS idx_lectures_course ON lectures(course_id);
+CREATE INDEX IF NOT EXISTS idx_lectures_subject ON lectures(subject);
+CREATE INDEX IF NOT EXISTS idx_comments_lecture ON comments(lecture_id);
+CREATE INDEX IF NOT EXISTS idx_votes_lecture ON votes(lecture_id);
+CREATE INDEX IF NOT EXISTS idx_viewlog_day ON view_log(day);
+CREATE INDEX IF NOT EXISTS idx_contributions_status ON contributions(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_apikeys_hash ON api_keys(key_hash);

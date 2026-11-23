@@ -1,0 +1,251 @@
+// TLDB DB layer — dual mode:
+//   local/dev : libSQL file (node: @libsql/client)      TLDB_DB=file:tldb.db
+//   prod      : Cloudflare D1 binding (Workers)          env.TLDB_DB
+// Same async q.get/q.all/q.run API for both.
+'use strict';
+// @libsql/client is imported lazily so the Cloudflare Workers bundle never pulls it in.
+
+let client = null;
+let mode = 'libsql'; // 'libsql' | 'd1'
+
+export async function setupDb({ d1, url, authToken } = {}) {
+  if (d1) { client = d1; mode = 'd1'; }
+  else {
+    const { createClient } = await import('@libsql/client');
+    client = createClient({ url: url || process.env.TLDB_DB || 'file:tldb.db', authToken: authToken || process.env.TLDB_DB_TOKEN });
+    mode = 'libsql';
+  }
+}
+
+export const SCHEMA_STATEMENTS = [
+`CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'student',
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+`CREATE TABLE IF NOT EXISTS sessions (
+  token TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  expires_at TEXT NOT NULL)`,
+`CREATE TABLE IF NOT EXISTS api_keys (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  name TEXT NOT NULL,
+  prefix TEXT NOT NULL,
+  key_hash TEXT NOT NULL,
+  scopes TEXT NOT NULL DEFAULT 'read',
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_used_at TEXT)`,
+`CREATE TABLE IF NOT EXISTS educators (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  bio TEXT DEFAULT '',
+  url TEXT DEFAULT '',
+  image_url TEXT DEFAULT '',
+  country TEXT DEFAULT '')`,
+`CREATE TABLE IF NOT EXISTS companies (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'publisher',
+  url TEXT DEFAULT '',
+  domain TEXT DEFAULT '',
+  country TEXT DEFAULT '')`,
+`CREATE TABLE IF NOT EXISTS courses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug TEXT UNIQUE NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  educator_id INTEGER REFERENCES educators(id),
+  company_id INTEGER REFERENCES companies(id),
+  subject TEXT DEFAULT '',
+  year INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+`CREATE TABLE IF NOT EXISTS lectures (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  public_id TEXT UNIQUE NOT NULL,
+  title TEXT NOT NULL,
+  slug TEXT UNIQUE NOT NULL,
+  description TEXT DEFAULT '',
+  educator_id INTEGER REFERENCES educators(id),
+  company_id INTEGER REFERENCES companies(id),
+  rights_holder TEXT DEFAULT '',
+  source_type TEXT NOT NULL,
+  source_url TEXT NOT NULL,
+  duration_sec INTEGER DEFAULT 0,
+  language TEXT DEFAULT 'en',
+  subject TEXT DEFAULT '',
+  tags TEXT DEFAULT '[]',
+  batch_name TEXT DEFAULT '',               -- original batch/cohort the lecture came from
+  year INTEGER,
+  status TEXT NOT NULL DEFAULT 'pending',
+  featured INTEGER DEFAULT 0,
+  course_id INTEGER REFERENCES courses(id),
+  position INTEGER,
+  source_status TEXT NOT NULL DEFAULT 'ok',   -- ok | dead
+  submitted_by INTEGER REFERENCES users(id),
+  reviewed_by INTEGER REFERENCES users(id),
+  review_note TEXT DEFAULT '',
+  likes INTEGER NOT NULL DEFAULT 0,
+  dislikes INTEGER NOT NULL DEFAULT 0,
+  views INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  published_at TEXT)`,
+`CREATE TABLE IF NOT EXISTS comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  lecture_id INTEGER NOT NULL REFERENCES lectures(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  body TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+`CREATE TABLE IF NOT EXISTS votes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  lecture_id INTEGER NOT NULL REFERENCES lectures(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  value INTEGER NOT NULL,
+  UNIQUE(lecture_id, user_id))`,
+`CREATE TABLE IF NOT EXISTS watchlist (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  lecture_id INTEGER NOT NULL REFERENCES lectures(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(lecture_id, user_id))`,
+`CREATE TABLE IF NOT EXISTS view_log (
+  lecture_id INTEGER NOT NULL REFERENCES lectures(id),
+  day TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(lecture_id, day))`,
+`CREATE TABLE IF NOT EXISTS contributions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  action TEXT NOT NULL,
+  target_id INTEGER,
+  payload TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  reviewer_id INTEGER REFERENCES users(id),
+  review_note TEXT DEFAULT '',
+  lecture_id INTEGER REFERENCES lectures(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  reviewed_at TEXT)`,
+`CREATE TABLE IF NOT EXISTS feedback (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER REFERENCES users(id),
+  lecture_id INTEGER REFERENCES lectures(id),
+  educator_id INTEGER REFERENCES educators(id),
+  company_id INTEGER REFERENCES companies(id),
+  type TEXT NOT NULL DEFAULT 'report',      -- report | edit | other
+  message TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',      -- open | resolved | dismissed
+  reviewer_id INTEGER REFERENCES users(id),
+  resolution_note TEXT DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  reviewed_at TEXT)`,
+`CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL)`,
+];
+
+let schemaReady = false;
+
+export async function ensureSchema() {
+  if (schemaReady) return;
+  if (mode === 'libsql') {
+    await client.execute('PRAGMA journal_mode = WAL;');
+    // light migrations for pre-existing local DBs
+    const addCols = [
+      ['educators', 'image_url', "TEXT DEFAULT ''"],
+      ['companies', 'domain', "TEXT DEFAULT ''"],
+      ['lectures', 'featured', 'INTEGER DEFAULT 0'],
+      ['educators', 'country', "TEXT DEFAULT ''"],
+      ['companies', 'country', "TEXT DEFAULT ''"],
+      ['lectures', 'course_id', 'INTEGER'],
+      ['lectures', 'position', 'INTEGER'],
+      ['lectures', 'source_status', "TEXT DEFAULT 'ok'"],
+      ['lectures', 'batch_name', "TEXT DEFAULT ''"],
+    ];
+    for (const [table, col, def] of addCols) {
+      const cols = (await client.execute(`PRAGMA table_info(${table})`)).rows.map(r => r.name);
+      if (cols.length && !cols.includes(col)) await client.execute(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+    }
+  }
+  for (const stmt of SCHEMA_STATEMENTS) {
+    if (mode === 'd1') await client.prepare(stmt).run();
+    else await client.execute(stmt);
+  }
+  schemaReady = true;
+}
+
+export const q = {
+  get: async (sql, ...p) => {
+    if (mode === 'd1') return (await client.prepare(sql).bind(...p).first()) || null;
+    return (await client.execute({ sql, args: p })).rows[0] || null;
+  },
+  all: async (sql, ...p) => {
+    if (mode === 'd1') return (await client.prepare(sql).bind(...p).all()).results;
+    return (await client.execute({ sql, args: p })).rows;
+  },
+  run: async (sql, ...p) => {
+    if (mode === 'd1') {
+      const r = await client.prepare(sql).bind(...p).run();
+      return { lastInsertRowid: Number(r.meta.last_row_id), changes: Number(r.meta.changes) };
+    }
+    const rs = await client.execute({ sql, args: p });
+    return { lastInsertRowid: Number(rs.lastInsertRowid), changes: Number(rs.rowsAffected) };
+  },
+};
+
+// ---------- portable crypto (works in Node AND Workers) ----------
+const enc = new TextEncoder();
+const toHex = (buf) => [...buf].map(b => b.toString(16).padStart(2, '0')).join('');
+function timingSafeEq(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+export async function hashPassword(password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iterations = 100000;
+  const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, key, 256);
+  return `pbkdf2$${iterations}$${toHex(salt)}$${toHex(new Uint8Array(bits))}`;
+}
+
+export async function verifyPassword(password, stored) {
+  const s = String(stored);
+  if (s.startsWith('pbkdf2$')) {
+    const [, iters, saltHex, hashHex] = s.split('$');
+    const salt = new Uint8Array(saltHex.match(/.{2}/g).map(h => parseInt(h, 16)));
+    const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: Number(iters), hash: 'SHA-256' }, key, 256);
+    return timingSafeEq(toHex(new Uint8Array(bits)), hashHex);
+  }
+  return false; // legacy scrypt hashes are not portable to Workers — reseed or reset
+}
+
+export async function sha256(s) {
+  const buf = await crypto.subtle.digest('SHA-256', enc.encode(s));
+  return toHex(new Uint8Array(buf));
+}
+
+export function slugify(s) {
+  return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'untitled';
+}
+
+export async function nextPublicId() {
+  const row = await q.get(`SELECT COUNT(*) AS n FROM lectures WHERE status = 'published'`);
+  return 'LC-' + String((row?.n || 0) + 1).padStart(6, '0');
+}
+
+export async function logView(lectureId) {
+  const day = new Date().toISOString().slice(0, 10);
+  await q.run(
+    `INSERT INTO view_log (lecture_id, day, count) VALUES (?, ?, 1)
+     ON CONFLICT(lecture_id, day) DO UPDATE SET count = count + 1`, lectureId, day);
+}

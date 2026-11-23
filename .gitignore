@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.wrangler/
+tldb.db
+tldb.db-wal
+tldb.db-shm
+server.log
+wrangler-install.log
+shot-*.png
+*.log
+.DS_Store

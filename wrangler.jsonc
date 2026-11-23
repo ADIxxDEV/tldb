@@ -11,7 +11,7 @@
     {
       "binding": "TLDB_DB",
       "database_name": "tldb",
-      "database_id": "REPLACE_WITH_YOUR_D1_ID"
+      "database_id": "c613c8b1-f181-46e8-9195-2b92de834010"
     }
   ],
   "vars": {}

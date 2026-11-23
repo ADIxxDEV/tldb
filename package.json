@@ -15,9 +15,10 @@
   "dependencies": {
     "@hono/node-server": "^2.1.11",
     "@libsql/client": "^0.18.0",
-    "hono": "^4.13.21"
+    "hono": "^4.13.21",
+    "puppeteer-core": "^25.18.1"
   },
   "devDependencies": {
-    "puppeteer-core": "^25.18.1"
+    "wrangler": "^4.166.0"
   }
 }

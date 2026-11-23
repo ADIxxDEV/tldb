@@ -186,7 +186,7 @@ export async function ensureSchema() {
   ];
   for (const [table, col, def] of addCols) {
     const info = mode === 'd1'
-      ? await client.prepare(`PRAGMA table_info(${table})`).all()
+      ? (await client.prepare(`PRAGMA table_info(${table})`).all()).results
       : (await client.execute(`PRAGMA table_info(${table})`)).rows;
     const cols = info.map(r => r.name);
     if (cols.length && !cols.includes(col)) {

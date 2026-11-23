@@ -2,6 +2,7 @@
 'use strict';
 import { Hono } from 'hono';
 import { attachAuth, requireApiKey, rateLimit } from './auth.js';
+import { turnstileConfig } from './antibot.js';
 import { webRoutes } from './routes/web.js';
 import { adminRoutes } from './routes/admin.js';
 import { v1Routes } from './routes/v1.js';
@@ -9,6 +10,15 @@ import { writeRoutes } from './routes/write.js';
 
 export function buildApp() {
   const app = new Hono();
+
+  // expose Turnstile config + IP-based abuse limits
+  app.use('*', async (c, next) => {
+    c.env = c.env || {};
+    if (!c.env.turnstile) c.env.turnstile = turnstileConfig(Object.keys(c.env).length ? c.env : process.env);
+    await next();
+  });
+  app.use('/api/*', rateLimit(300, 60, 'api', 'RL_API'));   // scrape protection: 300 req/min per IP
+  app.use('/api/auth/*', rateLimit(10, 60, 'auth', 'RL_AUTH')); // brute-force protection: 10 auth tries/min per IP
 
   app.use('/api/*', attachAuth);
   app.use('/v1/*', attachAuth);
@@ -24,6 +34,12 @@ export function buildApp() {
   app.route('/v1', adminRoutes);
 
   app.get('/api/health', (c) => c.json({ ok: true, service: 'tldb', time: new Date().toISOString() }));
+
+  // auth page config: which human-verification widget to render
+  app.get('/api/auth/config', (c) => {
+    const t = c.env.turnstile;
+    return c.json({ turnstile: t.enabled ? { site_key: t.siteKey } : null });
+  });
 
   app.onError((err, c) => {
     console.error(err);

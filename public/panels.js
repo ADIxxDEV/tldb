@@ -2,20 +2,47 @@
 'use strict';
 
 // ---------- auth ----------
+// Turnstile widget: rendered only when real keys are configured server-side.
+let turnstileToken = null;
+async function addTurnstile(containerId) {
+  turnstileToken = null;
+  try {
+    const cfg = await api('/auth/config');
+    if (!cfg.turnstile) return;
+    const box = document.getElementById(containerId);
+    if (!box) return;
+    if (!document.getElementById('ts-script')) {
+      const s = document.createElement('script');
+      s.id = 'ts-script'; s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+      document.head.appendChild(s);
+      await new Promise(r => { s.onload = r; s.onerror = r; });
+    }
+    if (window.turnstile) {
+      window.turnstile.render(box, {
+        sitekey: cfg.turnstile.site_key,
+        callback: (t) => { turnstileToken = t; },
+        'expired-callback': () => { turnstileToken = null; },
+      });
+    }
+  } catch { /* config unavailable — proceed without widget */ }
+}
+
 VIEWS.login = async (el) => {
   el.innerHTML = `<div class="auth"><div class="panel">
     <h1>Sign in</h1><div class="sub">To vote, comment, contribute and manage keys.</div>
     <form id="f" class="stack">
       <label class="f" for="em">Email</label><input class="plain" id="em" name="email" type="email" required>
       <label class="f" for="pw">Password</label><input class="plain" id="pw" name="password" type="password" required>
+      <div id="ts-login"></div>
       <button class="btn primary" type="submit">Sign in</button>
     </form>
     <p class="muted" style="font-size:13px">No account? <a href="#/signup">Join TLDB</a>.</p>
   </div></div>`;
+  addTurnstile('ts-login');
   $('#f').onsubmit = async (e) => {
     e.preventDefault();
     try {
-      const r = await api('/auth/login', { method: 'POST', body: { email: e.target.email.value, password: e.target.password.value } });
+      const r = await api('/auth/login', { method: 'POST', body: { email: e.target.email.value, password: e.target.password.value, turnstile_token: turnstileToken } });
       state.user = r.user; toast('Signed in'); location.hash = '#/';
     } catch (err) { toast(err.message, true); }
   };
@@ -23,19 +50,21 @@ VIEWS.login = async (el) => {
 
 VIEWS.signup = async (el) => {
   el.innerHTML = `<div class="auth"><div class="panel">
-    <h1>Join TLDB</h1><div class="sub">Students start here. Contributor access is granted after a quick review.</div>
+    <h1>Join TLDB</h1><div class="sub">Students start here. Contributor access is granted after a quick review. Disposable/temp email addresses are rejected.</div>
     <form id="f" class="stack">
       <label class="f" for="nm">Name</label><input class="plain" id="nm" name="name" required>
       <label class="f" for="em">Email</label><input class="plain" id="em" name="email" type="email" required>
       <label class="f" for="pw">Password (8+ characters)</label><input class="plain" id="pw" name="password" type="password" minlength="8" required>
+      <div id="ts-signup"></div>
       <button class="btn primary" type="submit">Create account</button>
     </form>
     <p class="muted" style="font-size:13px">Already registered? <a href="#/login">Sign in</a>.</p>
   </div></div>`;
+  addTurnstile('ts-signup');
   $('#f').onsubmit = async (e) => {
     e.preventDefault();
     try {
-      const r = await api('/auth/signup', { method: 'POST', body: { name: e.target.name.value, email: e.target.email.value, password: e.target.password.value } });
+      const r = await api('/auth/signup', { method: 'POST', body: { name: e.target.name.value, email: e.target.email.value, password: e.target.password.value, turnstile_token: turnstileToken } });
       state.user = r.user; toast('Welcome to TLDB'); location.hash = '#/';
     } catch (err) { toast(err.message, true); }
   };

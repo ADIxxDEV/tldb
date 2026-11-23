@@ -2,23 +2,17 @@
 'use strict';
 import { Hono } from 'hono';
 import { q } from '../db.js';
+import { rateLimit } from '../auth.js';
 
 export const v1Routes = new Hono();
 
-// rate limit: 120 req/min per key (per-isolate window; approximate on Workers)
-const hits = new Map();
-const WINDOW_MS = 60_000;
+// rate limit: 120 req/min per key — native binding on Workers, in-memory on Node
+v1Routes.use('*', rateLimit(120, 60, 'v1', 'RL_V1'));
 
 v1Routes.use('*', async (c, next) => {
   const key = c.get('apiKey');
   const user = c.get('apiUser');
   if (!key || !user) return c.json({ error: 'Valid X-API-Key header required. Create one in the TLDB developer panel.' }, 401);
-  const now = Date.now();
-  const entry = hits.get(key.id);
-  const count = entry && now - entry.t < WINDOW_MS ? entry.n + 1 : 1;
-  hits.set(key.id, { t: now, n: count });
-  if (count > 120) return c.json({ error: 'Rate limit exceeded (120 req/min)' }, 429);
-  c.header('X-RateLimit-Remaining', String(120 - count));
   await next();
 });
 

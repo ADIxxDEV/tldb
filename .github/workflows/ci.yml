@@ -1,0 +1,25 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Syntax check all server + frontend JS
+        run: |
+          for f in server/*.js server/routes/*.js worker/*.js public/*.js tests/*.mjs; do
+            node --check "$f"
+          done
+      - name: Run API test suite
+        run: npm test
+        env:
+          PORT: 4199

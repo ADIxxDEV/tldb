@@ -1,0 +1,46 @@
+name: Deploy
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  deploy:
+    # only deploy when CI (tests) passed on main
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+  smoke:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the production site after deploy
+        run: |
+          sleep 5
+          ok=1
+          check() {  # name url expected
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$2")
+            echo "$1 -> $code (want $3)"
+            [ "$code" = "$3" ] || ok=0
+          }
+          check "health"     "https://tldb.eapp.workers.dev/api/health" 200
+          check "home html"  "https://tldb.eapp.workers.dev/" 200
+          check "catalog"    "https://tldb.eapp.workers.dev/api/lectures" 200
+          check "meta"       "https://tldb.eapp.workers.dev/api/meta" 200
+          check "v1 no key"  "https://tldb.eapp.workers.dev/v1/lectures" 401
+          data=$(curl -s "https://tldb.eapp.workers.dev/api/home")
+          echo "$data" | grep -q '"stats"' || ok=0
+          [ "$ok" = "1" ] && echo "PRODUCTION OK" || { echo "PRODUCTION BROKEN"; exit 1; }

@@ -12,7 +12,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(__dirname, '..', 'public');
 const PORT = process.env.PORT || 4173;
 
-await setupDb();
+await setupDb(); // db path via TLDB_DB env
 await ensureSchema();
 
 const app = buildApp();

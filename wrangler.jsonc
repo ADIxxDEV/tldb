@@ -14,5 +14,17 @@
       "database_id": "c613c8b1-f181-46e8-9195-2b92de834010"
     }
   ],
-  "vars": {}
+  "ratelimits": [
+    { "name": "RL_API", "namespace_id": "1001", "simple": { "limit": 300, "period": 60 } },
+    { "name": "RL_AUTH", "namespace_id": "1002", "simple": { "limit": 10, "period": 60 } },
+    { "name": "RL_V1", "namespace_id": "1003", "simple": { "limit": 120, "period": 60 } }
+  ],
+  "vars": {
+    // Cloudflare Turnstile (human verification on login/signup).
+    // Create a widget at dash.cloudflare.com → Turnstile, then paste the keys here:
+    // "TURNSTILE_SITE_KEY": "0xYOUR_SITE_KEY",
+    // "TURNSTILE_SECRET": "0xYOUR_SECRET_KEY"
+    // Until then the built-in TEST keys are used: the widget is hidden and
+    // verification always passes locally.
+  }
 }

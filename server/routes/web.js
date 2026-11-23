@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { Hono } from 'hono';
 import { setCookie, deleteCookie } from 'hono/cookie';
 import { q, hashPassword, verifyPassword, sha256, slugify, logView } from '../db.js';
+import { isTempEmail, verifyTurnstile, turnstileConfig } from '../antibot.js';
 import { createSession, destroySession, publicUser, requireRole } from '../auth.js';
 
 export const webRoutes = new Hono();
@@ -35,11 +36,17 @@ const LECTURE_SELECT_SCORED = `
   LEFT JOIN companies c ON c.id = l.company_id`;
 
 // ---------- auth ----------
+const clientIp = (c) => c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() || 'local';
+
 webRoutes.post('/auth/signup', async (c) => {
   const b = await c.req.json().catch(() => ({}));
   const { email, name, password } = b;
   if (!email || !name || !password || String(password).length < 8)
     return c.json({ error: 'Email, name and a password of 8+ characters are required' }, 400);
+  if (isTempEmail(email))
+    return c.json({ error: 'Disposable / temporary email addresses are not allowed — use a real inbox' }, 400);
+  if (!(await verifyTurnstile(b.turnstile_token, clientIp(c), c.env?.turnstile)))
+    return c.json({ error: 'Human verification failed — please retry the checkbox' }, 403);
   if (await q.get(`SELECT id FROM users WHERE email = ?`, String(email).toLowerCase()))
     return c.json({ error: 'That email is already registered' }, 409);
   const isFirst = !(await q.get(`SELECT id FROM users LIMIT 1`));
@@ -53,6 +60,8 @@ webRoutes.post('/auth/signup', async (c) => {
 
 webRoutes.post('/auth/login', async (c) => {
   const b = await c.req.json().catch(() => ({}));
+  if (!(await verifyTurnstile(b.turnstile_token, clientIp(c), c.env?.turnstile)))
+    return c.json({ error: 'Human verification failed — please retry the checkbox' }, 403);
   const u = await q.get(`SELECT * FROM users WHERE email = ?`, String(b.email || '').toLowerCase());
   if (!u || !(await verifyPassword(String(b.password || ''), u.password_hash)))
     return c.json({ error: 'Wrong email or password' }, 401);

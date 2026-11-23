@@ -73,11 +73,20 @@ export function requireApiKey() {
   };
 }
 
-// Simple fixed-window rate limiter (per IP+key), shared by API mounts
-export function rateLimit(max = 120, windowSec = 60) {
+// Fixed-window rate limiter. On Workers uses native rate-limit bindings
+// (accurate across isolates; the binding's configured limit applies).
+// Falls back to in-memory counting on Node (single process).
+export function rateLimit(max = 120, windowSec = 60, bucket = 'general', bindingName = null) {
   const hits = new Map();
   return async (c, next) => {
     const id = c.get('apiKey')?.id || c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'anon';
+    const rl = bindingName ? c.env?.[bindingName] : null;
+    if (rl?.limit) {
+      const r = await rl.limit({ key: `${bucket}:${id}` });
+      if (!r?.success) return c.json({ error: 'Rate limit exceeded — slow down' }, 429);
+      await next();
+      return;
+    }
     const now = Date.now();
     const w = Math.floor(now / (windowSec * 1000));
     const rec = hits.get(id);

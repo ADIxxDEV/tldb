@@ -65,3 +65,20 @@ D1 binding depending on the environment.
 - Public API is at `/v1/*` with `X-API-Key` headers (create keys on the site, 120 req/min each).
 - Free plan limits are far beyond TLDB's needs: 100k DB writes/day, 5M reads/day, 500 MB storage
   (lecture metadata is a few KB per record).
+
+## CI/CD (GitHub Actions)
+- **CI** (`.github/workflows/ci.yml`): on every push/PR — syntax-checks all JS and runs the API test suite (`npm test`). Tests must pass.
+- **Deploy** (`.github/workflows/deploy.yml`): only runs when CI passed on `main` → deploys with wrangler → **smoke-checks production** (health, home, catalog, meta, keyed-API 401). Red workflow = broken production.
+- One-time setup: add two repo secrets (Settings → Secrets and variables → Actions):
+  - `CLOUDFLARE_API_TOKEN` — create at dash.cloudflare.com → My Profile → API Tokens with **Workers Scripts: Edit** + **D1: Edit** permissions
+  - `CLOUDFLARE_ACCOUNT_ID` — from the Cloudflare dashboard right sidebar
+- After that, every push to `main` tests → deploys → verifies itself.
+
+## Turnstile (human verification)
+- Login and signup are protected by Cloudflare Turnstile.
+- Without keys, official TEST keys are used (widget hidden, always passes) — fine for local dev.
+- To enforce for real: create a widget (dash.cloudflare.com → Turnstile), put `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET` in `wrangler.jsonc` `vars` (or as Workers secrets), redeploy.
+
+## Anti-abuse
+- Disposable/temp email domains are rejected at signup (curated blocklist + heuristics in `server/antibot.js`).
+- IP rate limits: 300 req/min on `/api/*`, 10 tries/min on `/api/auth/*` (brute-force), 120 req/min on the keyed `/v1/*`.

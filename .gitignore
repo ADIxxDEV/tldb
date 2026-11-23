@@ -9,3 +9,4 @@ wrangler-install.log
 shot-*.png
 *.log
 .DS_Store
+tldb-test.db*

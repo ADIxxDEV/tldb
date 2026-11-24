@@ -14,11 +14,14 @@ the source (YouTube, Internet Archive, torrent/magnet, direct file, HLS/DASH str
 ## Run locally
 ```bash
 npm install
-npm run seed     # creates admin + sample records
+npm run seed     # creates the admin account + Physics Wallah as the rights holder (no lectures)
 npm start        # → http://localhost:4173
 ```
 
-First account created becomes **admin**. Seed admin: `admin@tldb.local` / `changeme123` (change it).
+First account created becomes **admin**. Seed admin: `admin@tldb.local` / `changeme123` (change it on `#/account`).
+
+The catalog starts **empty on purpose** — fill it with the admin import API (`docs/AI-IMPORT.md`),
+the contribute form, or the admin panel's import box.
 
 ## Deploy (free)
 See **DEPLOY.md** — Cloudflare Workers + D1, ~5 commands, $0/month.

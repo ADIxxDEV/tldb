@@ -28,7 +28,7 @@ wrangler deploy
 #    → https://tldb.<your-subdomain>.workers.dev
 ```
 
-## Seed the production DB (admin + starter records)
+## Seed the production DB (admin + Physics Wallah, no lectures)
 
 ```bash
 # option A: run the seed SQL through wrangler
@@ -115,5 +115,5 @@ can be resolved the same way a client resolves it at the source.
 CLI helper: `node scripts/import-pw.js [base-url] [admin-email] [password] [file]`
 Sample + full format: `data/pw-sample.json`.
 
-Physics Wallah is seeded as a rights-holder company (pw.live) with three records in this format
-(two paid batch lectures, one free crash lecture).
+Physics Wallah is seeded as the single rights-heading company (pw.live). The catalog itself starts empty:
+fill it with `POST /api/admin/import` (`docs/AI-IMPORT.md`), the admin panel import box, or the contribute form.

@@ -220,6 +220,22 @@ VIEWS.admin = async (el) => {
       <div class="stat"><b>${ov.keys}</b><span>active API keys</span></div>
       <div class="stat"><b>${ov.feedback_open}</b><span>open feedback</span></div>
     </div>
+    <div class="panel"><h2>Import from an AI / provider feed</h2>
+      <p class="muted" style="margin-top:0">Paste JSON with PW's own id hierarchy — batch id → subject id → topic id → original video id. Full format: <span class="mono">docs/AI-IMPORT.md</span>. Re-running is safe: records are de-duplicated on provider + batch id + video id.</p>
+      <form id="importForm" class="grid2">
+        <div><label class="f" for="ip-provider">Provider key *</label><input class="plain" id="ip-provider" value="pw" required></div>
+        <div><label class="f" for="ip-company">Rights holder *</label><input class="plain" id="ip-company" value="Physics Wallah" required></div>
+        <div><label class="f" for="ip-domain">Domain</label><input class="plain" id="ip-domain" value="pw.live"></div>
+        <div><label class="f" for="ip-file">…or load a file</label><input class="plain" id="ip-file" type="file" accept=".json,application/json"></div>
+        <div style="grid-column:1/-1"><label class="f" for="ip-json">Records JSON</label>
+          <textarea class="plain mono" id="ip-json" rows="8" style="width:100%;resize:vertical" placeholder='{"records":[{"video_title":"Kinematics 01","batch_name":"Lakshya JEE 2025","batch_id":"64b7...","lecture_id":"672a...","access":"paid","educator":"Alakh Pandey"}]}'></textarea></div>
+        <div style="grid-column:1/-1"><button class="btn small primary" type="submit">Import records</button>
+          <span class="muted" id="ip-result" style="margin-left:12px"></span></div>
+      </form>
+      <div class="notice" style="margin-top:14px">Same thing over HTTP for any AI agent:<br>
+        <span class="mono">POST /api/admin/import</span> with header <span class="mono">X-API-Key: &lt;admin key&gt;</span>
+      </div>
+    </div>
     <div class="panel"><h2>Courses & playlists</h2>
       <form id="courseForm" class="grid2">
         <div><label class="f" for="ct">Course title *</label><input class="plain" id="ct" required placeholder="e.g. MIT 6.006 — Introduction to Algorithms"></div>
@@ -319,6 +335,27 @@ VIEWS.admin = async (el) => {
     await api(`/admin/lectures/${b.dataset.hide}/hide`, { method: 'POST', body: { hidden: hide } });
     toast(hide ? 'Hidden — off the dashboard, findable only via search' : 'Visible again'); VIEWS.admin(el);
   });
+  const ipFile = $('#ip-file');
+  if (ipFile) ipFile.onchange = async () => {
+    const f = ipFile.files && ipFile.files[0];
+    if (!f) return;
+    $('#ip-json').value = await f.text();
+  };
+  $('#importForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const g = (id) => e.target.querySelector('#' + id).value.trim();
+    let payload;
+    try { payload = JSON.parse(g('ip-json')); } catch { return toast('That is not valid JSON', true); }
+    const body = {
+      provider: g('ip-provider'), company: g('ip-company'), company_domain: g('ip-domain'),
+      records: Array.isArray(payload) ? payload : payload.records,
+    };
+    try {
+      const r = await api('/admin/import', { method: 'POST', body });
+      $('#ip-result').textContent = `created ${r.created} · skipped ${r.skipped} (already there) · failed ${r.failed}`;
+      toast(`Imported ${r.created} — ${r.skipped} already present`);
+    } catch (err) { toast(err.message, true); }
+  };
   $('#courseForm').onsubmit = async (e) => {
     e.preventDefault();
     const v = (id) => e.target.querySelector('#' + id).value.trim();

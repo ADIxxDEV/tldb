@@ -128,10 +128,61 @@ function skeleton(kind) {
   return skelRow().repeat(6);
 }
 
+// A catalog with nothing in it should invite one clear action, not show seven empty shelves.
+function firstRun(home) {
+  const companies = home.companies || [];
+  const batches = home.batches || [];
+  return `
+    <div class="fr-hero">
+      <div class="fr-copy">
+        <h1>Every lecture, on the record.</h1>
+        <p class="fr-lead">TLDB keeps the facts about a lecture — who taught it, who owns it, which
+           batch it sits in, and where it lives. The video always stays with its owner.</p>
+        <p class="fr-note">The shelves are empty on purpose: a catalogue starts with its first record.</p>
+        <div class="fr-actions">
+          <a class="btn primary" href="#/contribute">Add the first record</a>
+          <a class="btn" href="#/docs">Import with the API</a>
+        </div>
+      </div>
+      <figure class="fr-anatomy" aria-label="What one record contains">
+        <span class="rid">LC-000000</span>
+        <b>Lecture title</b>
+        <dl>
+          <dt>Taught by</dt><dd>An educator, with a page of their own</dd>
+          <dt>Owned by</dt><dd>${esc(companies[0]?.name || 'The rights holder')}</dd>
+          <dt>Batch</dt><dd>${esc(batches[0]?.name || 'The course it was published in')}</dd>
+          <dt>Source</dt><dd>The official page — never a copy</dd>
+        </dl>
+        <figcaption>One record, five facts. That is the whole product.</figcaption>
+      </figure>
+    </div>
+    ${batches.length ? `
+      <div class="section-head"><h2>Course structures on file</h2><span class="muted">subject, topic and lecture titles</span></div>
+      <div class="card-grid">${batches.map(batchCard).join('')}<a class="edu-card ghost" href="#/contribute"><span class="edu-name">Add another batch</span><span class="edu-sub">through the form or the API</span></a></div>` : ''}
+    <div class="section-head"><h2>What a record holds</h2><span class="muted">nothing is copied or hosted</span></div>
+    <div class="panel fr-grid">
+      <div><h3>Who taught it</h3><p class="muted">The educator, their own page, and everything else of theirs on file.</p></div>
+      <div><h3>Who owns it</h3><p class="muted">The rights holder and the batch it was published in — never us.</p></div>
+      <div><h3>Where it lives</h3><p class="muted">The official page. Free lectures open there; paid ones lead to that batch's own paywall.</p></div>
+    </div>
+    <div class="section-head"><h2>Rights holders</h2><span class="muted">${companies.length} on file</span></div>
+    ${strip(companies, logoChip) || '<div class="empty">No companies on record yet.</div>'}
+    <div class="fr-close">
+      <div><b>Ready to put the first lecture on the record?</b>
+        <p class="muted">A sign-in, a title, a rights holder and a link is all it takes.</p></div>
+      <a class="btn primary" href="#/contribute">Add the first record</a>
+    </div>`;
+}
+
 VIEWS.home = async (el) => {
   el.innerHTML = skeleton('home');
   const [home, me] = await Promise.all([api('/home'), api('/auth/me')]);
   state.user = me.user; renderNav();
+  if (!home.stats.total && !(home.featured || []).length) {
+    el.innerHTML = firstRun(home);
+    $('#homeSearch') && ($('#homeSearch').onsubmit = (e) => { e.preventDefault(); location.hash = '#/browse?query=' + encodeURIComponent(e.target.q.value.trim()); });
+    return;
+  }
   const f = home.featured;
   const hero = f.length ? `
     <div class="feature-hero">
@@ -219,9 +270,29 @@ VIEWS.browse = async (el, params, query) => {
       <option value="">${label}</option>
       ${options.map(o => `<option value="${esc(o.v)}" ${String(o.v) === current ? 'selected' : ''}>${esc(o.t)}</option>`).join('')}
     </select>`;
+  const heading = q ? `Results for “${esc(q)}”` : cur.subject ? `${esc(cur.subject)} records` : cur.educator ? 'Educator records' : cur.batch ? `${esc(cur.batch)} records` : cur.country ? `Records from ${esc(cur.country)}` : 'The catalog';
+  const hasFilters = Object.entries(cur).some(([k, v]) => k !== 'sort' && v);
+  if (!data.total && !hasFilters) {
+    // an empty catalog should read as an invitation, not a broken filter bar
+    el.innerHTML = `
+      <div class="section-head" style="margin-top:0"><h1>${heading}</h1></div>
+      <form class="searchbar" id="browseSearch" style="margin:18px 0 10px;max-width:480px">
+        <input name="q" value="${esc(q)}" placeholder="Search titles, descriptions, tags" aria-label="Search lectures">
+        <button type="submit">Search</button>
+      </form>
+      <div class="empty" style="padding:48px 0">
+        <p><b>No records yet.</b> The catalog opens with its first contribution — a lecture, a name, a rights holder and a link to the source.</p>
+        <div class="actions" style="justify-content:center;margin-top:16px">
+          <a class="btn primary" href="#/contribute">Add the first record</a>
+          <a class="btn" href="#/docs">Import with the API</a>
+        </div>
+      </div>`;
+    $('#browseSearch').onsubmit = (e) => { e.preventDefault(); location.hash = '#/browse?query=' + encodeURIComponent(e.target.q.value.trim()); };
+    return;
+  }
   el.innerHTML = `
     <div class="section-head" style="margin-top:0">
-      <h2>${q ? `Results for “${esc(q)}”` : cur.subject ? `${esc(cur.subject)} records` : cur.educator ? 'Educator records' : cur.batch ? `${esc(cur.batch)} — batch records` : cur.country ? `Records from ${esc(cur.country)}` : 'The catalog'}</h2>
+      <h1>${heading}</h1>
       <span class="muted">${data.total} record${data.total === 1 ? '' : 's'}</span>
     </div>
     <form class="searchbar" id="browseSearch" style="margin:18px 0 10px;max-width:480px">
@@ -247,7 +318,8 @@ VIEWS.browse = async (el, params, query) => {
   $('#browseSearch').onsubmit = (e) => { e.preventDefault(); location.hash = '#/browse?query=' + encodeURIComponent(e.target.q.value.trim()); };
   const apply = (key, value) => { location.hash = buildHash({ [key]: value }); };
   [['fSort', 'sort'], ['fCountry', 'country'], ['fLanguage', 'language'], ['fSubject', 'subject'], ['fBatch', 'batch'], ['fAccess', 'access'], ['fProvider', 'provider'], ['fSource', 'source']].forEach(([id, key]) => {
-    $('#' + id).onchange = (e) => apply(key, e.target.value);
+    const node = $('#' + id);
+    if (node) node.onchange = (e) => apply(key, e.target.value);
   });
 };
 
@@ -464,6 +536,12 @@ async function route() {
   if (!view) { VIEWS.notfound(el); renderNav(); return; }
   try { await view(el, { slug: parts[1], id: parts[2] || parts[1] }, query); }
   catch (e) { el.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+  const TITLES = { home: 'The Lecture Database', browse: 'Catalog', lecture: 'Record', batch: 'Batch', course: 'Course',
+    subjects: 'Subjects', educator: 'Educator', company: 'Rights holder', docs: 'API', contribute: 'Contribute',
+    admin: 'Admin', account: 'Account', keys: 'API keys', login: 'Sign in', signup: 'Join', apply: 'Become a contributor',
+    watchlist: 'My list', notfound: 'Not found', forbidden: 'Not allowed' };
+  const label = TITLES[name] || 'TLDB';
+  document.title = name === 'home' ? 'TLDB — The Lecture Database' : `${label} — TLDB`;
   renderNav();
   window.scrollTo(0, 0);
 }

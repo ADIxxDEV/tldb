@@ -28,17 +28,17 @@ function money(b) {
 function batchFacts(b) {
   const st = STATUS_LABEL[b.status] || STATUS_LABEL.unknown;
   const rows = [
-    ['status', `<span class="badge ${st.cls}">${st.label}</span>`],
-    ['access', b.access === 'free'
+    ['Status', `<span class="badge ${st.cls}">${st.label}</span>`],
+    ['Access', b.access === 'free'
       ? '<span class="badge ok">Free</span>'
       : `<span class="badge warn">Paid</span> <span class="mono">${esc(money(b))}</span>`],
-    ['certificate', esc(CERT_LABEL[b.certificate] || CERT_LABEL.unknown)],
+    ['Certificate', esc(CERT_LABEL[b.certificate] || CERT_LABEL.unknown)],
   ];
-  if (b.starts_on && b.ends_on) rows.push(['dates', `${esc(b.starts_on)} → ${esc(b.ends_on)}`]);
-  else if (b.starts_on) rows.push(['starts', esc(b.starts_on)]);
-  else if (b.ends_on) rows.push(['ended', esc(b.ends_on)]);
-  if (b.language) rows.push(['language', esc(b.language)]);
-  if (b.subtitle) rows.push(['also called', esc(b.subtitle)]);
+  if (b.starts_on && b.ends_on) rows.push(['Dates', `${esc(b.starts_on)} → ${esc(b.ends_on)}`]);
+  else if (b.starts_on) rows.push(['Starts', esc(b.starts_on)]);
+  else if (b.ends_on) rows.push(['Ended', esc(b.ends_on)]);
+  if (b.language) rows.push(['Language', esc(b.language)]);
+  if (b.subtitle) rows.push(['Also called', esc(b.subtitle)]);
   return rows;
 }
 
@@ -46,14 +46,14 @@ function batchFacts(b) {
 function headerType1(b, counts) {
   return `
     <div class="section-head" style="margin-top:0">
-      <h2>${esc(b.name)}</h2>
+      <h1>${esc(b.name)}</h1>
       ${b.company_slug ? `<a href="#/company/${esc(b.company_slug)}">${esc(b.company)} →</a>` : ''}
     </div>
     ${b.description ? `<p class="muted">${esc(b.description)}</p>` : ''}
     <dl class="facts">
       ${batchFacts(b).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}
-      <dt>content</dt><dd class="mono muted">${counts.subjects} subjects · ${counts.topics} topics · ${counts.videos} lecture${counts.videos === 1 ? '' : 's'}${counts.notes ? ` · ${counts.notes} notes/PDFs` : ''}</dd>
-      <dt>provider ids</dt><dd class="mono muted">batch ${esc(b.external_id)}${b.provider ? ` (${esc(b.provider.toUpperCase())})` : ''}</dd>
+      <dt>Inside</dt><dd class="muted">${counts.subjects} subject${counts.subjects === 1 ? '' : 's'}, ${counts.topics} topic${counts.topics === 1 ? '' : 's'}, ${counts.videos} lecture${counts.videos === 1 ? '' : 's'}${counts.notes ? ` and ${counts.notes} notes or PDFs` : ''}</dd>
+      <dt>Provider ids</dt><dd class="mono muted">batch ${esc(b.external_id)}${b.provider ? ` (${esc(b.provider.toUpperCase())})` : ''}</dd>
     </dl>
     ${b.purchase_url
       ? `<div class="actions"><a class="btn primary" href="${esc(b.purchase_url)}" target="_blank" rel="noopener">${b.access === 'free' ? 'Open at source' : 'Buy / enrol at source'} ↗</a></div>`
@@ -77,13 +77,13 @@ VIEWS.batch = async (el, params) => {
     <details class="tree-subject" ${si === 0 ? 'open' : ''}>
       <summary>
         <b>${esc(s.name)}</b>
-        <span class="mono muted">${s.topics.length} topic${s.topics.length === 1 ? '' : 's'}${s.external_id ? ` · id ${esc(s.external_id)}` : ''}</span>
+        <span class="mono muted">${s.topics.length} topic${s.topics.length === 1 ? '' : 's'}${s.external_id ? `, id ${esc(s.external_id)}` : ''}</span>
       </summary>
       ${s.topics.length ? s.topics.map((t) => `
         <details class="tree-topic" ${si === 0 && t === s.topics[0] ? 'open' : ''}>
           <summary>
             <span>${esc(t.name)}</span>
-            <span class="mono muted">${t.items.length} item${t.items.length === 1 ? '' : 's'}${t.external_id ? ` · id ${esc(t.external_id)}` : ''}</span>
+            <span class="mono muted">${t.items.length} item${t.items.length === 1 ? '' : 's'}${t.external_id ? `, id ${esc(t.external_id)}` : ''}</span>
           </summary>
           ${t.items.length ? `<ul class="tree-items">${t.items.map((it) => `
             <li>
@@ -91,7 +91,7 @@ VIEWS.batch = async (el, params) => {
               ${it.lecture_id
                 ? `<a href="#/lecture/${esc(it.lecture_id)}">${esc(it.title)}</a>`
                 : `<span>${esc(it.title)}</span>`}
-              <span class="mono muted">${esc(it.kind)}${it.duration_sec ? ` · ${Math.round(it.duration_sec / 60)} min` : ''}${it.external_id ? ` · ${esc(it.external_id)}` : ''}</span>
+              <span class="mono muted">${esc(it.kind)}${it.duration_sec ? `, ${Math.round(it.duration_sec / 60)} min` : ''}${it.external_id ? `, ${esc(it.external_id)}` : ''}</span>
               ${it.url ? `<a class="mono" href="${esc(it.url)}" target="_blank" rel="noopener">source ↗</a>` : ''}
             </li>`).join('')}</ul>`
             : '<div class="muted" style="padding:6px 0 10px">No items listed here yet.</div>'}

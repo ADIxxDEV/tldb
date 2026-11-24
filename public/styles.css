@@ -208,6 +208,7 @@ table.grid tr:hover td { background: var(--panel-2); }
 .avatar { position: relative; }
 .avatar .monogram { position: relative; z-index: 0; }
 .avatar.logo { border-radius: var(--radius); }
+.avatar.logo img { background: #f6f4ef; }
 .monogram { font-family: var(--serif); color: var(--gold); font-size: 18px; }
 .hot { color: var(--gold); }
 
@@ -318,7 +319,7 @@ select.filter { width: auto; padding: 8px 12px; font-size: 13.5px; margin: 0; }
 
 /* ---------- batch pages (provider course structure) ---------- */
 .facts { display: grid; grid-template-columns: 130px 1fr; gap: 8px 18px; margin: 18px 0 6px; }
-.facts dt { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .08em; }
+.facts dt { color: var(--muted); font-size: 13px; }
 .facts dd { margin: 0; }
 .badge.ok { border-color: #2f6d4a; color: #7fd6a0; }
 .badge.warn { border-color: #7a5a1e; color: var(--gold); }
@@ -346,3 +347,32 @@ select.filter { width: auto; padding: 8px 12px; font-size: 13.5px; margin: 0; }
 .tree-items .mono.muted { font-size: 11px; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
 @media (max-width: 640px) { .facts { grid-template-columns: 1fr; gap: 2px; } .facts dd { margin-bottom: 8px; } }
+
+/* ---------- first run (empty catalogue) ---------- */
+.fr-hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr); gap: 42px; align-items: start; padding: 26px 0 10px; }
+.fr-copy h1 { font-size: clamp(34px, 4.6vw, 58px); line-height: 1.03; margin: 0 0 18px; }
+.fr-lead { font-size: 16.5px; line-height: 1.6; max-width: 54ch; color: var(--fg); }
+.fr-note { color: var(--muted); font-size: 14px; margin-top: 14px; padding-left: 12px; border-left: 2px solid var(--gold); }
+.fr-actions { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 24px; }
+.fr-anatomy { margin: 0; padding: 20px 22px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel); font-size: 13.5px; }
+.fr-anatomy > b { display: block; font-family: var(--serif); font-size: 20px; margin: 8px 0 14px; }
+.fr-anatomy dl { display: grid; grid-template-columns: 84px 1fr; gap: 8px 14px; margin: 0; }
+.fr-anatomy dt { color: var(--muted); font-size: 12.5px; }
+.fr-anatomy dd { margin: 0; color: var(--fg); }
+.fr-anatomy figcaption { margin-top: 16px; padding-top: 12px; border-top: 1px dashed rgba(242,193,78,.28); color: var(--muted); font-size: 12.5px; }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; padding: 8px 0 6px; }
+.card-grid .edu-card { width: 100%; }
+.edu-card.ghost { border-style: dashed; background: transparent; }
+.fr-close { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap;
+  margin-top: 34px; padding: 22px 24px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.fr-close p { margin: 4px 0 0; font-size: 14px; }
+@media (max-width: 860px) { .fr-hero { grid-template-columns: 1fr; gap: 26px; } }
+.fr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 22px; }
+.fr-grid h3 { font-family: var(--sans); font-size: 15px; font-weight: 600; margin: 0 0 6px; color: var(--gold); letter-spacing: .01em; }
+.fr-grid p { margin: 0; font-size: 14px; line-height: 1.55; }
+@media (max-width: 640px) { .fr-copy h1 { font-size: 34px; } }
+
+.skip { position: absolute; left: -9999px; top: 0; background: var(--gold); color: #101418;
+  padding: 10px 16px; border-radius: 0 0 var(--radius) 0; z-index: 100; font-weight: 600; }
+.skip:focus { left: 0; }

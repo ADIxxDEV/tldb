@@ -31,6 +31,14 @@ async function upsertCompany(name, kind = 'publisher', domain = '') {
   return (await q.run(`INSERT INTO companies (slug, name, kind, url, domain) VALUES (?,?,?,?,?)`, slug, name, kind, '', domain || '')).lastInsertRowid;
 }
 
+// Resolve a lecture by numeric id, public id (LC-000012) or slug — scripts use any of them.
+async function resolveLecture(key) {
+  const k = String(key || '').trim();
+  if (!k) return null;
+  return await q.get(`SELECT * FROM lectures WHERE public_id = ? OR slug = ? OR id = ?`,
+    k, k, /^\d+$/.test(k) ? Number(k) : -1);
+}
+
 // feedback queue: reports & edit suggestions
 adminRoutes.get('/admin/feedback', adminOnly, async (c) => {
   const rows = await q.all(
@@ -176,7 +184,7 @@ adminRoutes.post('/admin/lectures/:id', adminOnly, async (c) => {
 });
 
 adminRoutes.post('/admin/lectures/:id/feature', adminOnly, async (c) => {
-  const l = await q.get(`SELECT id, featured FROM lectures WHERE id = ?`, c.req.param('id'));
+  const l = await resolveLecture(c.req.param('id'));
   if (!l) return c.json({ error: 'Lecture not found' }, 404);
   const body = await c.req.json().catch(() => ({}));
   const on = body.featured !== undefined ? (body.featured ? 1 : 0) : (l.featured ? 0 : 1);
@@ -221,8 +229,10 @@ adminRoutes.post('/admin/courses', adminOnly, async (c) => {
 });
 
 adminRoutes.post('/admin/courses/:id/lectures', adminOnly, async (c) => {
-  const cid = c.req.param('id');
-  if (!(await q.get(`SELECT id FROM courses WHERE id = ?`, cid))) return c.json({ error: 'Course not found' }, 404);
+  const key = c.req.param('id');
+  const course = await q.get(`SELECT id FROM courses WHERE id = ? OR slug = ?`, /^\d+$/.test(key) ? Number(key) : -1, key);
+  if (!course) return c.json({ error: 'Course not found' }, 404);
+  const cid = course.id;
   const b = await c.req.json().catch(() => ({}));
   const l = await q.get(`SELECT id FROM lectures WHERE public_id = ? OR slug = ?`, String(b.lecture || '').trim(), String(b.lecture || '').trim());
   if (!l) return c.json({ error: 'Lecture not found (use LC-xxxxxx id or slug)' }, 404);
@@ -244,7 +254,9 @@ adminRoutes.post('/admin/lectures/:id/source-status', adminOnly, async (c) => {
   const b = await c.req.json().catch(() => ({}));
   const status = ['ok', 'dead'].includes(b.status) ? b.status : null;
   if (!status) return c.json({ error: 'Bad status' }, 400);
-  await q.run(`UPDATE lectures SET source_status = ? WHERE id = ?`, status, c.req.param('id'));
+  const lec = await resolveLecture(c.req.param('id'));
+  if (!lec) return c.json({ error: 'Lecture not found' }, 404);
+  await q.run(`UPDATE lectures SET source_status = ? WHERE id = ?`, status, lec.id);
   return c.json({ ok: true, source_status: status });
 });
 
@@ -252,7 +264,9 @@ adminRoutes.post('/admin/lectures/:id/source-status', adminOnly, async (c) => {
 adminRoutes.post('/admin/lectures/:id/hide', adminOnly, async (c) => {
   const b = await c.req.json().catch(() => ({}));
   const hidden = b.hidden ? 1 : 0;
-  await q.run(`UPDATE lectures SET hidden = ?, featured = CASE WHEN ? = 1 THEN 0 ELSE featured END WHERE id = ?`, hidden, hidden, c.req.param('id'));
+  const lec = await resolveLecture(c.req.param('id'));
+  if (!lec) return c.json({ error: 'Lecture not found' }, 404);
+  await q.run(`UPDATE lectures SET hidden = ?, featured = CASE WHEN ? = 1 THEN 0 ELSE featured END WHERE id = ?`, hidden, hidden, lec.id);
   return c.json({ ok: true, hidden: !!hidden });
 });
 
@@ -328,4 +342,140 @@ adminRoutes.post('/admin/import', adminOnly, async (c) => {
     created++;
   }
   return c.json({ ok: true, provider, created, skipped, failed, records: ids });
+});
+
+// ---------- direct write API (for scripts / AI agents; no review queue) ----------
+// POST /api/admin/companies   { name, kind?, domain?, url?, country? }
+adminRoutes.post('/admin/companies', adminOnly, async (c) => {
+  const b = await c.req.json().catch(() => ({}));
+  const name = String(b.name || '').trim();
+  if (!name) return c.json({ error: 'name is required' }, 400);
+  const slug = slugify(name);
+  const found = await q.get(`SELECT * FROM companies WHERE slug = ?`, slug);
+  const values = [String(b.kind || found?.kind || 'publisher'), String(b.url || found?.url || ''),
+    String(b.domain || found?.domain || ''), String(b.country || found?.country || '')];
+  if (found) {
+    await q.run(`UPDATE companies SET kind = ?, url = ?, domain = ?, country = ? WHERE id = ?`, ...values, found.id);
+    return c.json({ ok: true, created: false, slug, id: found.id });
+  }
+  const info = await q.run(`INSERT INTO companies (slug, name, kind, url, domain, country) VALUES (?,?,?,?,?,?)`,
+    slug, name, ...values);
+  return c.json({ ok: true, created: true, slug, id: info.lastInsertRowid });
+});
+
+// POST /api/admin/educators   { name, bio?, image_url?, url?, country? }
+adminRoutes.post('/admin/educators', adminOnly, async (c) => {
+  const b = await c.req.json().catch(() => ({}));
+  const name = String(b.name || '').trim();
+  if (!name) return c.json({ error: 'name is required' }, 400);
+  const slug = slugify(name);
+  const found = await q.get(`SELECT * FROM educators WHERE slug = ?`, slug);
+  const bio = String(b.bio || found?.bio || ''), img = String(b.image_url || found?.image_url || '');
+  const url = String(b.url || found?.url || ''), country = String(b.country || found?.country || '');
+  if (found) {
+    await q.run(`UPDATE educators SET bio = ?, image_url = ?, url = ?, country = ? WHERE id = ?`, bio, img, url, country, found.id);
+    return c.json({ ok: true, created: false, slug, id: found.id });
+  }
+  const info = await q.run(`INSERT INTO educators (slug, name, bio, url, image_url, country) VALUES (?,?,?,?,?,?)`,
+    slug, name, bio, url, img, country);
+  return c.json({ ok: true, created: true, slug, id: info.lastInsertRowid });
+});
+
+// POST /api/admin/lectures  — publish a record straight away (scripts skip the queue)
+adminRoutes.post('/admin/lectures', adminOnly, async (c) => {
+  const admin = c.get('user') || c.get('apiUser');
+  const b = await c.req.json().catch(() => ({}));
+  const title = String(b.title || '').trim();
+  const sourceUrl = String(b.source_url || '').trim();
+  if (!title) return c.json({ error: 'title is required' }, 400);
+  if (!sourceUrl) return c.json({ error: 'source_url is required' }, 400);
+  const companyName = String(b.company || b.rights_holder || '').trim();
+  const educatorName = String(b.educator || b.educator_name || companyName || 'Unknown').trim();
+  const companyId = companyName ? await upsertCompany(companyName, 'publisher', String(b.company_domain || '')) : null;
+
+  let slug = slugify(title);
+  if (await q.get(`SELECT id FROM lectures WHERE slug = ?`, slug)) slug = `${slug}-${Date.now().toString(36).slice(-4)}`;
+  const publicId = await nextPublicId();
+  const sourceType = String(b.source_type || (/youtu/.test(sourceUrl) ? 'youtube' : 'stream'));
+  const access = b.access === 'paid' ? 'paid' : 'free';
+  const info = await q.run(
+    `INSERT INTO lectures (public_id, title, slug, description, educator_id, company_id, rights_holder,
+       source_type, source_url, duration_sec, language, subject, tags, batch_name, batch_id, subject_id, topic_id,
+       provider, external_id, access, purchase_url, year, status, featured, hidden,
+       submitted_by, reviewed_by, published_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'published', 0, 0, ?, ?, datetime('now'))`,
+    publicId, title, slug, String(b.description || ''), await upsertEducator(educatorName),
+    companyId, companyName || educatorName, sourceType, sourceUrl, Number(b.duration_sec) || 0,
+    String(b.language || 'en'), String(b.subject || ''), JSON.stringify(Array.isArray(b.tags) ? b.tags : []),
+    String(b.batch_name || ''), String(b.batch_id || ''), String(b.subject_id || ''), String(b.topic_id || ''),
+    String(b.provider || ''), String(b.external_id || ''), access, String(b.purchase_url || ''),
+    Number(b.year) || null, admin.id, admin.id);
+  return c.json({ ok: true, id: info.lastInsertRowid, public_id: publicId, slug });
+});
+
+// PATCH /api/admin/lectures/:publicId — edit any field of a published record
+adminRoutes.patch('/admin/lectures/:id', adminOnly, async (c) => {
+  const key = c.req.param('id');
+  const row = await q.get(`SELECT * FROM lectures WHERE public_id = ? OR slug = ?`, key, key);
+  if (!row) return c.json({ error: 'Lecture not found' }, 404);
+  const b = await c.req.json().catch(() => ({}));
+  const allowed = ['title', 'description', 'source_type', 'source_url', 'duration_sec', 'language', 'subject',
+    'batch_name', 'batch_id', 'subject_id', 'topic_id', 'provider', 'external_id', 'access', 'purchase_url',
+    'year', 'hidden', 'featured', 'source_status'];
+  const sets = [], vals = [];
+  for (const k of allowed) if (b[k] !== undefined) { sets.push(`${k} = ?`); vals.push(b[k]); }
+  if (b.tags !== undefined) { sets.push('tags = ?'); vals.push(JSON.stringify(b.tags)); }
+  if (!sets.length) return c.json({ error: 'No editable fields supplied' }, 400);
+  await q.run(`UPDATE lectures SET ${sets.join(', ')} WHERE id = ?`, ...vals, row.id);
+  return c.json({ ok: true, public_id: row.public_id, updated: sets.length });
+});
+
+// DELETE /api/admin/lectures/:publicId
+adminRoutes.delete('/admin/lectures/:id', adminOnly, async (c) => {
+  const key = c.req.param('id');
+  const row = await q.get(`SELECT id FROM lectures WHERE public_id = ? OR slug = ?`, key, key);
+  if (!row) return c.json({ error: 'Lecture not found' }, 404);
+  await q.run(`UPDATE batch_contents SET lecture_id = NULL WHERE lecture_id = ?`, row.id);
+  await q.run(`DELETE FROM view_log WHERE lecture_id = ?`, row.id);
+  await q.run(`UPDATE lectures SET course_id = NULL WHERE course_id = ? AND id = ?`, row.id, row.id);
+  await q.run(`DELETE FROM votes WHERE lecture_id = ?`, row.id);
+  await q.run(`DELETE FROM comments WHERE lecture_id = ?`, row.id);
+  await q.run(`DELETE FROM watchlist WHERE lecture_id = ?`, row.id);
+  await q.run(`UPDATE feedback SET lecture_id = NULL WHERE lecture_id = ?`, row.id);
+  await q.run(`UPDATE contributions SET lecture_id = NULL WHERE lecture_id = ?`, row.id);
+  await q.run(`DELETE FROM lectures WHERE id = ?`, row.id);
+  return c.json({ ok: true, deleted: key });
+});
+
+// DELETE /api/admin/companies/:slug — removes the row only when nothing references it
+adminRoutes.delete('/admin/companies/:slug', adminOnly, async (c) => {
+  const slug = c.req.param('slug');
+  const co = await q.get(`SELECT id FROM companies WHERE slug = ?`, slug);
+  if (!co) return c.json({ error: 'Company not found' }, 404);
+  const used = await q.get(`SELECT COUNT(*) AS n FROM lectures WHERE company_id = ?`, co.id)
+    || await q.get(`SELECT COUNT(*) AS n FROM batches WHERE company_id = ?`, co.id);
+  await q.run(`UPDATE lectures SET company_id = NULL WHERE company_id = ?`, co.id);
+  await q.run(`UPDATE batches SET company_id = NULL WHERE company_id = ?`, co.id);
+  await q.run(`DELETE FROM companies WHERE id = ?`, co.id);
+  return c.json({ ok: true, deleted: slug, detached_lectures: used?.n ?? 0 });
+});
+
+// DELETE /api/admin/educators/:slug
+adminRoutes.delete('/admin/educators/:slug', adminOnly, async (c) => {
+  const slug = c.req.param('slug');
+  const e = await q.get(`SELECT id FROM educators WHERE slug = ?`, slug);
+  if (!e) return c.json({ error: 'Educator not found' }, 404);
+  await q.run(`UPDATE lectures SET educator_id = NULL WHERE educator_id = ?`, e.id);
+  await q.run(`DELETE FROM educators WHERE id = ?`, e.id);
+  return c.json({ ok: true, deleted: slug });
+});
+
+// DELETE /api/admin/courses/:id
+adminRoutes.delete('/admin/courses/:id', adminOnly, async (c) => {
+  const key = c.req.param('id');
+  const course = await q.get(`SELECT id FROM courses WHERE id = ? OR slug = ?`, /^\d+$/.test(key) ? Number(key) : -1, key);
+  if (!course) return c.json({ error: 'Course not found' }, 404);
+  await q.run(`UPDATE lectures SET course_id = NULL, position = NULL WHERE course_id = ?`, course.id);
+  await q.run(`DELETE FROM courses WHERE id = ?`, course.id);
+  return c.json({ ok: true, deleted: key });
 });

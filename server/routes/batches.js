@@ -184,3 +184,126 @@ batchRoutes.post('/admin/import-batch', async (c) => {
   }
   return c.json({ ok: true, batch_id: batchId, slug, subjects: subjN, topics: topicN, items: itemN });
 });
+
+// ---------- incremental batch editing (scripts) ----------
+// GET /api/admin/batches — every batch with its ids and counts
+batchRoutes.get('/admin/batches', async (c) => {
+  const rows = await q.all(
+    `SELECT b.id, b.provider, b.external_id, b.slug, b.name, b.status, b.access, b.price, b.currency,
+            b.certificate, (SELECT COUNT(*) FROM batch_subjects s WHERE s.batch_id = b.id) AS subjects
+     FROM batches b ORDER BY b.created_at DESC`);
+  return c.json({ batches: rows });
+});
+
+// POST /api/admin/batches — create or update just the batch facts (no tree)
+batchRoutes.post('/admin/batches', async (c) => {
+  const b = await c.req.json().catch(() => ({}));
+  const provider = String(b.provider || '').toLowerCase();
+  const ext = String(b.external_id || b.batch_id || '').trim();
+  const name = String(b.name || b.batch_name || '').trim();
+  if (!provider || !ext || !name) return c.json({ error: 'provider, external_id and name are required' }, 400);
+  const found = await q.get(`SELECT id FROM batches WHERE provider = ? AND external_id = ?`, provider, ext);
+  const companyName = String(b.company || b.rights_holder || '');
+  let companyId = null;
+  if (companyName) {
+    const cslug = slugify(companyName);
+    const co = await q.get(`SELECT id FROM companies WHERE slug = ?`, cslug);
+    companyId = co?.id ?? (await q.run(`INSERT INTO companies (slug, name, kind, domain, country) VALUES (?,?,?,?,?)`,
+      cslug, companyName, 'publisher', String(b.company_domain || ''), String(b.country || ''))).lastInsertRowid;
+  }
+  const fields = [String(b.status || 'unknown'), String(b.access || 'paid'), String(b.price || ''),
+    String(b.currency || 'INR'), String(b.certificate || 'unknown'), String(b.certification_note || ''),
+    String(b.starts_on || ''), String(b.ends_on || ''), String(b.purchase_url || ''), String(b.language || ''),
+    Number(b.lecture_count || 0), String(b.description || ''), String(b.subtitle || '')];
+  if (found) {
+    await q.run(`UPDATE batches SET status=?, access=?, price=?, currency=?, certificate=?, certification_note=?,
+      starts_on=?, ends_on=?, purchase_url=?, language=?, lecture_count=?, description=?, subtitle=? WHERE id=?`,
+      ...fields, found.id);
+    return c.json({ ok: true, created: false, id: found.id, provider, external_id: ext });
+  }
+  let slug = slugify(String(b.slug || `${provider}-${name}`));
+  if (await q.get(`SELECT id FROM batches WHERE slug = ?`, slug)) slug = `${slug}-${ext}`.slice(0, 90);
+  const info = await q.run(
+    `INSERT INTO batches (provider, external_id, slug, name, company_id, rights_holder, status, access, price,
+       currency, certificate, certification_note, starts_on, ends_on, purchase_url, language, lecture_count,
+       description, subtitle, meta)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    provider, ext, slug, name, companyId, companyName || 'Unknown', ...fields, '{}');
+  return c.json({ ok: true, created: true, id: info.lastInsertRowid, slug, provider, external_id: ext });
+});
+
+// POST /api/admin/batches/:externalId/items — append a subject/topic tree (idempotent per subject name)
+batchRoutes.post('/admin/batches/:externalId/items', async (c) => {
+  const ext = c.req.param('externalId');
+  const provider = String(c.req.query('provider') || '').toLowerCase();
+  const batch = provider
+    ? await q.get(`SELECT id FROM batches WHERE provider = ? AND external_id = ?`, provider, ext)
+    : await q.get(`SELECT id FROM batches WHERE external_id = ?`, ext);
+  if (!batch) return c.json({ error: 'Batch not found' }, 404);
+  const b = await c.req.json().catch(() => ({}));
+  const subjects = Array.isArray(b.subjects) ? b.subjects : [];
+  let added = { subjects: 0, topics: 0, items: 0 };
+  for (const s of subjects) {
+    let sRow = await q.get(`SELECT id FROM batch_subjects WHERE batch_id = ? AND name = ?`, batch.id, String(s.name));
+    let sId;
+    if (sRow) sId = sRow.id;
+    else {
+      const pos = (await q.get(`SELECT COUNT(*) AS c FROM batch_subjects WHERE batch_id = ?`, batch.id)).c;
+      sId = (await q.run(`INSERT INTO batch_subjects (batch_id, external_id, name, position, lecture_count) VALUES (?,?,?,?,?)`,
+        batch.id, String(s.external_id || ''), String(s.name), pos, 0)).lastInsertRowid;
+      added.subjects++;
+    }
+    for (const t of (Array.isArray(s.topics) ? s.topics : [])) {
+      let tRow = await q.get(`SELECT id FROM batch_topics WHERE subject_id = ? AND name = ?`, sId, String(t.name));
+      let tId;
+      if (tRow) tId = tRow.id;
+      else {
+        const pos = (await q.get(`SELECT COUNT(*) AS c FROM batch_topics WHERE subject_id = ?`, sId)).c;
+        tId = (await q.run(`INSERT INTO batch_topics (subject_id, external_id, name, position, lecture_count) VALUES (?,?,?,?,?)`,
+          sId, String(t.external_id || ''), String(t.name), pos, 0)).lastInsertRowid;
+        added.topics++;
+      }
+      for (const it of (Array.isArray(t.items) ? t.items : [])) {
+        const title = String(it.title || it.name || '');
+        if (!title) continue;
+        const dup = await q.get(`SELECT id FROM batch_contents WHERE topic_id = ? AND (title = ? OR (external_id != '' AND external_id = ?))`,
+          tId, title, String(it.external_id || ''));
+        if (dup) continue;
+        const pos = (await q.get(`SELECT COUNT(*) AS c FROM batch_contents WHERE topic_id = ?`, tId)).c;
+        await q.run(`INSERT INTO batch_contents (topic_id, kind, title, external_id, duration_sec, url, position) VALUES (?,?,?,?,?,?,?)`,
+          tId, String(it.kind || 'video'), title, String(it.external_id || ''), Number(it.duration_sec || 0), String(it.url || ''), pos);
+        added.items++;
+      }
+    }
+  }
+  return c.json({ ok: true, batch_id: batch.id, added });
+});
+
+// POST /api/admin/batch-contents/:id/link  { lecture: "LC-000012" } — tie an item to a published record
+batchRoutes.post('/admin/batch-contents/:id/link', async (c) => {
+  const id = Number(c.req.param('id'));
+  const b = await c.req.json().catch(() => ({}));
+  const key = String(b.lecture || b.public_id || '').trim();
+  const item = await q.get(`SELECT id FROM batch_contents WHERE id = ?`, id);
+  if (!item) return c.json({ error: 'Batch item not found' }, 404);
+  if (!key) { await q.run(`UPDATE batch_contents SET lecture_id = NULL WHERE id = ?`, id); return c.json({ ok: true, unlinked: true }); }
+  const lec = await q.get(`SELECT id, public_id FROM lectures WHERE public_id = ? OR slug = ?`, key, key);
+  if (!lec) return c.json({ error: 'Lecture not found' }, 404);
+  await q.run(`UPDATE batch_contents SET lecture_id = ? WHERE id = ?`, lec.id, id);
+  return c.json({ ok: true, item_id: id, lecture: lec.public_id });
+});
+
+// DELETE /api/admin/batches/:externalId
+batchRoutes.delete('/admin/batches/:externalId', async (c) => {
+  const ext = c.req.param('externalId');
+  const provider = String(c.req.query('provider') || '').toLowerCase();
+  const batch = provider
+    ? await q.get(`SELECT id FROM batches WHERE provider = ? AND external_id = ?`, provider, ext)
+    : await q.get(`SELECT id FROM batches WHERE external_id = ?`, ext);
+  if (!batch) return c.json({ error: 'Batch not found' }, 404);
+  await q.run(`DELETE FROM batch_contents WHERE topic_id IN (SELECT id FROM batch_topics WHERE subject_id IN (SELECT id FROM batch_subjects WHERE batch_id = ?))`, batch.id);
+  await q.run(`DELETE FROM batch_topics WHERE subject_id IN (SELECT id FROM batch_subjects WHERE batch_id = ?)`, batch.id);
+  await q.run(`DELETE FROM batch_subjects WHERE batch_id = ?`, batch.id);
+  await q.run(`DELETE FROM batches WHERE id = ?`, batch.id);
+  return c.json({ ok: true, deleted: ext });
+});

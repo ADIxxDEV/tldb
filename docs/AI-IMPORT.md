@@ -134,6 +134,30 @@ replaces that batch's tree. Response: `{ok, batch_id, slug, subjects, topics, it
 
 Bundled example: `data/pw-batch-sample.json`; CLI: `node scripts/import-batch.js <base> <email> <password> <file>`.
 
+## 2c. Scripted population order
+
+The intended order for a script that fills the catalogue from scratch:
+
+```bash
+# 1. rights holders and people
+POST /api/admin/companies     {name, domain, country}
+POST /api/admin/educators     {name, bio, image_url}
+
+# 2. the course skeleton
+POST /api/admin/batches       {provider, external_id, name, status, access, price, certificate, purchase_url}
+POST /api/admin/batches/:external_id/items   {subjects:[{name, topics:[{name, items:[...]}]}]}
+
+# 3. lectures, then tie them to their slot in the tree
+POST /api/admin/lectures      {title, source_url, educator, company, provider, external_id, ...}
+POST /api/admin/batch-contents/:item_id/link {lecture: "LC-000012"}
+```
+
+Every write is idempotent where it matters (`import`, `import-batch`, `batches/:id/items`
+de-duplicate; `companies`, `educators`, `batches` upsert by name/id).
+
+Run `npm run test:api -- <base-url> <email> <password>` to exercise all 69 endpoints;
+the script creates its own fixtures and deletes them again, so it is safe on production.
+
 ## 3. Read endpoints (public, no key needed for most)
 
 | endpoint | what it gives |
@@ -153,6 +177,17 @@ Bundled example: `data/pw-batch-sample.json`; CLI: `node scripts/import-batch.js
 
 | endpoint | scope | purpose |
 |---|---|---|
+| `POST /api/admin/lectures` | `admin` | **publish a record directly** (no queue) — `title`, `source_url`, `educator`, `company`, `provider`, `external_id`, `batch_*`, `access`, `purchase_url`, `tags` |
+| `PATCH /api/admin/lectures/:id` | `admin` | edit any field by `LC-xxxxxx` id or slug |
+| `DELETE /api/admin/lectures/:id` | `admin` | delete a record and its votes, comments, saves, views |
+| `POST /api/admin/companies` | `admin` | create/update a rights holder (`name`, `domain`, `kind`, `country`) |
+| `POST /api/admin/educators` | `admin` | create/update an educator (`name`, `bio`, `image_url`, `url`, `country`) |
+| `POST /api/admin/batches` | `admin` | create/update batch facts only (status, price, certificate, dates, purchase_url) |
+| `POST /api/admin/batches/:externalId/items?provider=pw` | `admin` | append subjects/topics/items idempotently — safe to re-run |
+| `POST /api/admin/batch-contents/:id/link` | `admin` | attach a batch item to a published record (`{"lecture": "LC-000012"}`) |
+| `DELETE /api/admin/batches/:externalId?provider=pw` | `admin` | delete a batch and its tree |
+| `DELETE /api/admin/courses/:id` | `admin` | delete a course (records are detached, not deleted) |
+| `DELETE /api/admin/educators/:slug` / `companies/:slug` | `admin` | delete when no longer used |
 | `POST /v1/lectures` | `write` | submit one lecture → admin queue |
 | `POST /v1/feedback` | `write` | report a dead link / wrong metadata |
 | `GET /v1/contributions/mine` | `write` | status of your submissions |

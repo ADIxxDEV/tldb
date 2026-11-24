@@ -350,6 +350,9 @@ export async function submitContribution(c) {
     course_name: String(b.course_name || '').trim(),   // optional playlist/course grouping
     batch_name: String(b.batch_name || '').trim(),     // original batch/cohort label
     provider: String(b.provider || '').trim(),          // pw, unacademy, youtube ...
+    batch_id: String(b.batch_id || '').trim(),          // provider batch id (non-numeric)
+    subject_id: String(b.subject_id || '').trim(),      // provider subject id in batch
+    topic_id: String(b.topic_id || '').trim(),          // provider topic/chapter id
     external_id: String(b.external_id || '').trim(),    // provider-side content id (non-numeric)
     access: b.access === 'paid' ? 'paid' : 'free',
     purchase_url: String(b.purchase_url || '').trim(),

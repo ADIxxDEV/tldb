@@ -84,6 +84,9 @@ export const SCHEMA_STATEMENTS = [
   tags TEXT DEFAULT '[]',
   batch_name TEXT DEFAULT '',               -- original batch/cohort the lecture came from
   provider TEXT DEFAULT '',                 -- source platform (pw, unacademy, youtube, ...)
+  batch_id TEXT DEFAULT '',                 -- provider's batch id (non-numeric, e.g. PW batch _id)
+  subject_id TEXT DEFAULT '',               -- provider's subject id within the batch
+  topic_id TEXT DEFAULT '',                 -- provider's topic/chapter id
   external_id TEXT DEFAULT '',              -- the provider's own non-numeric content id (e.g. PW video id)
   access TEXT DEFAULT 'free',               -- free | paid
   purchase_url TEXT DEFAULT '',             -- where to buy when access = paid
@@ -187,6 +190,9 @@ export async function ensureSchema() {
     ['lectures', 'source_status', "TEXT DEFAULT 'ok'"],
     ['lectures', 'batch_name', "TEXT DEFAULT ''"],
     ['lectures', 'provider', "TEXT DEFAULT ''"],
+    ['lectures', 'batch_id', "TEXT DEFAULT ''"],
+    ['lectures', 'subject_id', "TEXT DEFAULT ''"],
+    ['lectures', 'topic_id', "TEXT DEFAULT ''"],
     ['lectures', 'external_id', "TEXT DEFAULT ''"],
     ['lectures', 'access', "TEXT DEFAULT 'free'"],
     ['lectures', 'purchase_url', "TEXT DEFAULT ''"],

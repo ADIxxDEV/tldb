@@ -1,5 +1,6 @@
 // Seed TLDB with the admin account + real, freely-available lectures (metadata only)
 'use strict';
+import { readFileSync } from 'node:fs';
 import { q, setupDb, ensureSchema as init, hashPassword, slugify, nextPublicId } from './db.js';
 
 async function upsertEducator(name, image_url = '', country = '') {
@@ -27,13 +28,13 @@ async function addLecture(adminId, l) {
   const publicId = await nextPublicId();
   await q.run(
     `INSERT INTO lectures (public_id, title, slug, description, educator_id, company_id, rights_holder,
-       source_type, source_url, duration_sec, language, subject, tags, batch_name, provider, external_id, access, purchase_url, year, status, featured,
+       source_type, source_url, duration_sec, language, subject, tags, batch_name, batch_id, subject_id, topic_id, provider, external_id, access, purchase_url, year, status, featured,
        submitted_by, reviewed_by, published_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'published', ?, ?, ?, datetime('now'))`,
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'published', ?, ?, ?, datetime('now'))`,
     publicId, l.title, slug, l.description || '', await upsertEducator(l.educator, l.educator_image || '', l.country || ''),
     l.company ? await upsertCompany(l.company, l.company_kind || 'publisher', l.domain || '', l.country || '') : null,
     l.rights_holder || l.educator, l.source_type, l.source_url, l.duration_sec || 0, l.language || 'en',
-    l.subject || '', JSON.stringify(l.tags || []), l.batch_name || '', l.provider || '', l.external_id || '',
+    l.subject || '', JSON.stringify(l.tags || []), l.batch_name || '', l.batch_id || '', l.subject_id || '', l.topic_id || '', l.provider || '', l.external_id || '',
     l.access === 'paid' ? 'paid' : 'free', l.purchase_url || '', l.year || null, l.featured ? 1 : 0, adminId, adminId);
   console.log('  +', publicId, l.title);
 }
@@ -58,25 +59,39 @@ const seed = [
   { title: 'Introduction: Crash Course World History #1', educator: 'John Green', country: 'United States', company: 'Crash Course', domain: 'thecrashcourse.com', country: 'United States', subject: 'History', source_type: 'youtube', source_url: 'https://www.youtube.com/watch?v=Yocja_N5s1I', tags: ['history', 'world-history'], year: 2012, duration_sec: 720, description: 'The opening of Crash Course World History — 15 minutes on why history matters, 40,000 years in scope.' },
   { title: 'How to Take Notes in College (Study Skills)', educator: 'Khan Academy', country: 'United States', company: 'Khan Academy', domain: 'khanacademy.org', country: 'United States', subject: 'Study Skills', source_type: 'youtube', source_url: 'https://www.youtube.com/@khanacademy', tags: ['study', 'skills'], description: 'Note-taking and study strategies from the Khan Academy free learning library.' },
   { title: 'Lecture 1: The Machine Learning Summer School opener', educator: 'MIT OpenCourseWare', country: 'United States', company: 'MIT', domain: 'mit.edu', country: 'United States', subject: 'Computer Science', source_type: 'archive', source_url: 'https://archive.org/details/mit_ocw_ai_lectures', tags: ['ai', 'ml', 'mit'], description: 'Classic MIT artificial intelligence lecture material preserved at the Internet Archive.' },
-  // ---- PW (Physics Wallah) — Indian edtech; records in their own format: video title,
-  // batch name, company content id, free/paid, educator. Metadata only, never hosted.
-  { title: 'Kinematics 01: Motion in a Straight Line', educator: 'Alakh Pandey', company: 'Physics Wallah', company_kind: 'publisher', company_domain: 'pw.live', country: 'IN',
-    subject: 'Physics', source_type: 'stream', source_url: 'https://www.pw.live/', batch_name: 'Lakshya JEE 2025',
-    provider: 'pw', external_id: 'pw_yl_101', access: 'paid', purchase_url: 'https://www.pw.live/', year: 2024,
-    tags: ['jee', 'kinematics', 'pw'], language: 'hi', duration_sec: 4200,
-    description: 'PW Lakshya JEE 2025 — opening physics lecture. Record points at the rights holder; playback requires a PW subscription.' },
-  { title: 'Ray Optics 01: Reflection and Spherical Mirrors', educator: 'Alakh Pandey', company: 'Physics Wallah', company_kind: 'publisher', company_domain: 'pw.live', country: 'IN',
-    subject: 'Physics', source_type: 'stream', source_url: 'https://www.pw.live/', batch_name: 'Arjuna NEET 2025',
-    provider: 'pw', external_id: 'pw_yl_214', access: 'paid', purchase_url: 'https://www.pw.live/', year: 2024,
-    tags: ['neet', 'optics', 'pw'], language: 'hi', duration_sec: 5100,
-    description: 'PW Arjuna NEET 2025 — ray optics from reflection to mirrors. Paid batch content; buy from PW.' },
-  { title: 'IUPAC Nomenclature: Free Crash Lecture', educator: 'Amit Mahajan', company: 'Physics Wallah', company_kind: 'publisher', company_domain: 'pw.live', country: 'IN',
-    subject: 'Chemistry', source_type: 'youtube', source_url: 'https://www.youtube.com/@PhysicsWallah', batch_name: 'PW Free Crash Course',
-    provider: 'pw', external_id: 'pw_yt_crash_007', access: 'free', year: 2023,
-    tags: ['jee', 'chemistry', 'free', 'pw'], language: 'hi', duration_sec: 3300,
-    description: 'Open crash lecture published by PW on YouTube — free to watch at the source.' },
 ];
 console.log('Seeding lectures...');
 for (const l of seed) await addLecture(admin.id, l);
+
+// Provider-format seed (PW / Physics Wallah) — mirrors the company's own id hierarchy:
+// batch id → subject id → topic id → original video id.
+const pwSample = JSON.parse(readFileSync(new URL('../data/pw-sample.json', import.meta.url), 'utf8'));
+console.log(`Seeding ${pwSample.records.length} ${pwSample.provider.toUpperCase()} records (${pwSample.company})...`);
+for (const r of pwSample.records) {
+  await addLecture(admin.id, {
+    title: r.video_title,
+    educator: r.educator,
+    company: pwSample.company,
+    company_kind: 'publisher',
+    domain: pwSample.company_domain,
+    country: 'India',
+    subject: r.subject,
+    source_type: /youtu/.test(r.source_url || '') ? 'youtube' : 'stream',
+    source_url: r.source_url,
+    duration_sec: r.duration_sec,
+    language: r.language,
+    year: r.year,
+    tags: [pwSample.provider, 'edtech'],
+    batch_name: r.batch_name,
+    batch_id: r.batch_id,
+    subject_id: r.subject_id,
+    topic_id: r.topic_id,
+    provider: pwSample.provider,
+    external_id: r.lecture_id,
+    access: r.access,
+    purchase_url: r.purchase_url,
+    description: `${r.batch_name} — provider content id ${r.lecture_id}. Record points at the rights holder; TLDB never hosts the video.`,
+  });
+}
 console.log('Done.');
 process.exit(0);

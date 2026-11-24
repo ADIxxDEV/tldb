@@ -91,7 +91,10 @@ Records carry the fields an edtech catalogue actually uses:
 | `title` | video title |
 | `batch_name` | batch / course name (e.g. "Lakshya JEE 2025") |
 | `provider` | platform key — `pw`, `unacademy`, `youtube`, … |
-| `external_id` | the provider's own **non-numeric** content/lecture id — the same id the company uses |
+| `batch_id` | the provider's **batch id** (non-numeric, theirs — PW uses 24-char ids) |
+| `subject_id` | the provider's subject id inside that batch |
+| `topic_id` | the provider's topic / chapter id |
+| `external_id` | the provider's own **non-numeric** video/lecture id — the same id the company uses |
 | `access` | `free` or `paid` |
 | `purchase_url` | official purchase page (required for paid) |
 | `educator` | teacher name |
@@ -99,6 +102,15 @@ Records carry the fields an edtech catalogue actually uses:
 **Bulk import (admin only):** `POST /api/admin/import` with
 `{ "provider": "pw", "company": "Physics Wallah", "company_domain": "pw.live", "records": [ … ] }`
 Records are de-duplicated on `provider + external_id`, so re-running an import is safe.
+
+The id chain is the same one PW's own API uses — `GET /v3/batches/{batch_id}/details`,
+`/v2/batches/{batch_id}/subject/{subject_id}/topics`,
+`/v2/batches/{batch_id}/subject/{subject_id}/contents?tag={topic_id}`, then the video id — so a record here
+can be resolved the same way a client resolves it at the source.
+
+**Read side (Lectrio-ready):**
+- `GET /v1/batches?provider=pw` → every batch with its id, name and lecture count
+- `GET /v1/batches/:batchId` → the whole batch, ordered, each lecture carrying `external_id`, `subject_id`, `topic_id`, `access`
 
 CLI helper: `node scripts/import-pw.js [base-url] [admin-email] [password] [file]`
 Sample + full format: `data/pw-sample.json`.

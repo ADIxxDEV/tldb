@@ -122,9 +122,9 @@ adminRoutes.post('/admin/contributions/:id/approve', adminOnly, async (c) => {
     p.rights_holder || p.educator_name || '', p.source_type, p.source_url, p.duration_sec || 0, p.language || 'en',
     p.subject || '', JSON.stringify(p.tags || []), p.year || null, courseId, position, cb.user_id, admin.id);
   await q.run(`UPDATE lectures SET batch_name = ? WHERE id = ?`, String(p.batch_name || ''), info.lastInsertRowid);
-  await q.run(`UPDATE lectures SET provider = ?, external_id = ?, access = ?, purchase_url = ? WHERE id = ?`,
+  await q.run(`UPDATE lectures SET provider = ?, external_id = ?, access = ?, purchase_url = ?, batch_id = ?, subject_id = ?, topic_id = ? WHERE id = ?`,
     String(p.provider || ''), String(p.external_id || ''), p.access === 'paid' ? 'paid' : 'free',
-    String(p.purchase_url || ''), info.lastInsertRowid);
+    String(p.purchase_url || ''), String(p.batch_id || ''), String(p.subject_id || ''), String(p.topic_id || ''), info.lastInsertRowid);
   await q.run(`UPDATE contributions SET status = 'approved', reviewer_id = ?, reviewed_at = datetime('now'), lecture_id = ? WHERE id = ?`,
     admin.id, info.lastInsertRowid, cb.id);
   return c.json({ ok: true, public_id: publicId, slug });
@@ -269,13 +269,16 @@ adminRoutes.get('/admin/keys', adminOnly, async (c) => {
 });
 
 // ---------- bulk import (PW / edtech provider format) ----------
+// Mirrors the real PW API hierarchy: batch → subject → topic → video.
 // POST /api/admin/import
 // {
 //   "provider": "pw", "company": "Physics Wallah", "company_domain": "pw.live",
 //   "records": [{
 //     "video_title": "...", "batch_name": "Lakshya JEE 2025",
-//     "id": "pw_101",                 // provider's own id (non-numeric)
-//     "lecture_id": "pw_101",         // original content id used by the company
+//     "batch_id": "64b7f2c9e1a2b3c4d5e6f701",     // provider batch id (non-numeric, theirs)
+//     "subject_id": "64b7f2c9e1a2b3c4d5e6f702",   // provider subject id inside the batch
+//     "topic_id": "64b7f2c9e1a2b3c4d5e6f703",     // provider topic/chapter id
+//     "lecture_id": "672a1b2c3d4e5f6a7b8c9d01",  // the ORIGINAL video id the company gives
 //     "access": "free" | "paid", "educator": "Alakh Pandey",
 //     "subject": "Physics", "duration_sec": 3600,
 //     "source_url": "...", "purchase_url": "..."
@@ -293,28 +296,35 @@ adminRoutes.post('/admin/import', adminOnly, async (c) => {
   let created = 0, skipped = 0, failed = 0;
   const ids = [];
   for (const r of records) {
-    const title = String(r.video_title || r.title || '').trim();
-    const externalId = String(r.lecture_id || r.id || r.external_id || '').trim();
+    const title = String(r.video_title || r.title || r.name || '').trim();
+    // the provider's original content id — same non-numeric id they use
+    const externalId = String(r.lecture_id || r.video_id || r.videoId || r.schedule_id || r.id || r._id || r.external_id || '').trim();
+    const batchId = String(r.batch_id || r.batchId || '').trim();
+    const subjectId = String(r.subject_id || r.subjectId || '').trim();
+    const topicId = String(r.topic_id || r.topicId || r.chapter_id || r.chapterId || '').trim();
     if (!title || !externalId) { failed++; continue; }
-    const dup = await q.get(`SELECT id FROM lectures WHERE provider = ? AND external_id = ?`, provider, externalId);
+    const dup = await q.get(
+      `SELECT id FROM lectures WHERE provider = ? AND external_id = ? AND COALESCE(batch_id,'') = ?`,
+      provider, externalId, batchId);
     if (dup) { skipped++; continue; }
-    const educatorName = String(r.educator || r.educator_name || companyName);
+    const educatorName = String(r.educator || r.byName || r.educator_name || companyName);
     const url = String(r.source_url || r.url || '').trim() || `https://www.${b.company_domain || 'pw.live'}/`;
     const sourceType = /youtu/.test(url) ? 'youtube' : (r.source_type || 'stream');
     const access = r.access === 'paid' || r.paid === true ? 'paid' : 'free';
     const slug = await uniqueSlug(title);
     const publicId = await nextPublicId();
-    const info = await q.run(
+    await q.run(
       `INSERT INTO lectures (public_id, title, slug, description, educator_id, company_id, rights_holder,
          source_type, source_url, duration_sec, language, subject, tags, batch_name, provider, external_id,
-         access, purchase_url, year, status, featured, submitted_by, reviewed_by, published_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'published', 0, ?, ?, datetime('now'))`,
+         batch_id, subject_id, topic_id, access, purchase_url, year, status, featured, submitted_by, reviewed_by, published_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'published', 0, ?, ?, datetime('now'))`,
       publicId, title, slug, String(r.description || ''), await upsertEducator(educatorName),
       companyId, companyName, sourceType, url, Number(r.duration_sec) || 0,
       String(r.language || 'en'), String(r.subject || ''), JSON.stringify(Array.isArray(r.tags) ? r.tags : []),
-      String(r.batch_name || r.batch || ''), provider, externalId, access,
+      String(r.batch_name || r.batchName || r.batch || ''), provider, externalId,
+      batchId, subjectId, topicId, access,
       String(r.purchase_url || ''), Number(r.year) || null, admin.id, admin.id);
-    ids.push({ id: publicId, slug, external_id: externalId });
+    ids.push({ id: publicId, slug, batch_id: batchId, external_id: externalId });
     created++;
   }
   return c.json({ ok: true, provider, created, skipped, failed, records: ids });

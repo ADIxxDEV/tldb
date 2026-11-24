@@ -19,6 +19,7 @@ v1Routes.use('*', async (c, next) => {
 const SELECT = `
   SELECT l.public_id, l.title, l.slug, l.description, l.source_type, l.source_url,
          l.duration_sec, l.language, l.subject, l.tags, l.year, l.likes, l.dislikes, l.views, l.hidden,
+         l.batch_name, l.batch_id, l.subject_id, l.topic_id, l.provider, l.external_id, l.access, l.purchase_url,
          l.published_at, e.name AS educator, e.slug AS educator_slug,
          c.name AS company, c.slug AS company_slug, l.rights_holder
   FROM lectures l
@@ -60,4 +61,38 @@ v1Routes.get('/companies', async (c) => {
   return c.json({ data: await q.all(`SELECT c.id, c.slug, c.name, c.kind, c.url, c.domain, COUNT(l.id) AS lecture_count
     FROM companies c LEFT JOIN lectures l ON l.company_id = c.id AND l.status = 'published'
     GROUP BY c.id ORDER BY lecture_count DESC, c.name LIMIT 200`) });
+});
+
+// ---------- provider batches (PW-style: batch id → its lectures) ----------
+v1Routes.get('/batches', async (c) => {
+  const provider = c.req.query('provider') || '';
+  const rows = await q.all(
+    `SELECT batch_id, batch_name, provider, COUNT(*) AS lecture_count,
+            SUM(CASE WHEN access = 'free' THEN 1 ELSE 0 END) AS free_count
+     FROM lectures
+     WHERE status = 'published' AND hidden = 0 AND (batch_id != '' OR batch_name != '')
+       ${provider ? 'AND provider = ?' : ''}
+     GROUP BY batch_id, batch_name, provider
+     ORDER BY lecture_count DESC LIMIT 200`, ...(provider ? [provider] : []));
+  return c.json({ data: rows });
+});
+
+v1Routes.get('/batches/:batchId', async (c) => {
+  const batchId = c.req.param('batchId');
+  // accepts either the provider batch id or the batch name slug
+  const lects = await q.all(
+    `${SELECT} WHERE l.status = 'published' AND l.hidden = 0 AND (l.batch_id = ? OR l.batch_name = ?)
+     ORDER BY COALESCE(l.position, 999999), l.published_at`,
+    batchId, batchId);
+  if (!lects.length) return c.json({ error: 'Batch not found' }, 404);
+  const first = lects[0];
+  return c.json({
+    data: {
+      batch_id: first.batch_id || batchId,
+      batch_name: lects[0].batch_name,
+      provider: lects[0].provider,
+      lecture_count: lects.length,
+      lectures: lects.map(r => ({ ...r, tags: JSON.parse(r.tags || '[]') })),
+    },
+  });
 });

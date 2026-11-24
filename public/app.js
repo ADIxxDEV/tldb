@@ -267,7 +267,7 @@ VIEWS.lecture = async (el, params) => {
         <p>${esc(l.description || 'No description on record yet.')}</p>
         <dl class="kv">
           <dt>source</dt><dd><span class="badge gold">${esc(srcLabel)}</span></dd>
-          ${l.provider ? `<dt>provider</dt><dd><span class="badge">${esc(l.provider.toUpperCase())}</span>${l.external_id ? ` <span class="mono muted">video id ${esc(l.external_id)}</span>` : ''}</dd>` : ''}
+          ${l.provider ? `<dt>provider</dt><dd><span class="badge">${esc(l.provider.toUpperCase())}</span>${l.external_id ? ` <span class="mono muted">video id ${esc(l.external_id)}</span>` : ''}${l.batch_id ? ` <span class="mono muted">· batch id ${esc(l.batch_id)}</span>` : ''}${l.subject_id ? ` <span class="mono muted">· subject ${esc(l.subject_id)}</span>` : ''}${l.topic_id ? ` <span class="mono muted">· topic ${esc(l.topic_id)}</span>` : ''}</dd>` : ''}
           <dt>access</dt><dd>${l.access === 'paid'
             ? `<span class="badge red">Paid</span>${l.purchase_url ? ` <a href="${esc(l.purchase_url)}" target="_blank" rel="noopener">Buy from the rights holder ↗</a>` : ' — buy from the rights holder'}`
             : `<span class="badge sage">Free to watch</span>`}</dd>

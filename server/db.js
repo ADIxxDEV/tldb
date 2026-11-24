@@ -67,6 +67,57 @@ export const SCHEMA_STATEMENTS = [
   subject TEXT DEFAULT '',
   year INTEGER,
   created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+`CREATE TABLE IF NOT EXISTS batches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  provider TEXT NOT NULL DEFAULT '',
+  external_id TEXT NOT NULL DEFAULT '',        -- the provider's own batch/course id
+  slug TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  subtitle TEXT DEFAULT '',
+  company_id INTEGER REFERENCES companies(id),
+  rights_holder TEXT DEFAULT '',
+  status TEXT DEFAULT 'unknown',               -- running | ended | upcoming | unknown
+  access TEXT DEFAULT 'paid',                  -- free | paid
+  price TEXT DEFAULT '',                       -- as shown by the institute, e.g. "4,999"
+  currency TEXT DEFAULT 'INR',
+  certificate TEXT DEFAULT 'unknown',          -- none | included | fee | exam | unknown
+  certification_note TEXT DEFAULT '',
+  starts_on TEXT DEFAULT '',
+  ends_on TEXT DEFAULT '',
+  purchase_url TEXT DEFAULT '',
+  language TEXT DEFAULT '',
+  lecture_count INTEGER DEFAULT 0,
+  description TEXT DEFAULT '',
+  meta TEXT DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+`CREATE TABLE IF NOT EXISTS batch_subjects (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_id INTEGER NOT NULL REFERENCES batches(id),
+  external_id TEXT DEFAULT '',                 -- provider's subject / folder id
+  name TEXT NOT NULL,
+  position INTEGER DEFAULT 0,
+  lecture_count INTEGER DEFAULT 0)`,
+`CREATE TABLE IF NOT EXISTS batch_topics (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  subject_id INTEGER NOT NULL REFERENCES batch_subjects(id),
+  external_id TEXT DEFAULT '',                 -- provider's topic / chapter id
+  name TEXT NOT NULL,
+  position INTEGER DEFAULT 0,
+  lecture_count INTEGER DEFAULT 0)`,
+`CREATE TABLE IF NOT EXISTS batch_contents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  topic_id INTEGER NOT NULL REFERENCES batch_topics(id),
+  kind TEXT NOT NULL DEFAULT 'video',          -- video | notes | pdf | test | dpp
+  title TEXT NOT NULL,
+  external_id TEXT DEFAULT '',                 -- provider's video / material id
+  duration_sec INTEGER DEFAULT 0,
+  lecture_id INTEGER REFERENCES lectures(id),  -- set when this item is catalogued as a lecture record
+  url TEXT DEFAULT '',                         -- official page for this item (no files here)
+  position INTEGER DEFAULT 0)`,
+`CREATE INDEX IF NOT EXISTS idx_batches_provider ON batches(provider, external_id)`,
+`CREATE INDEX IF NOT EXISTS idx_batch_subjects_batch ON batch_subjects(batch_id)`,
+`CREATE INDEX IF NOT EXISTS idx_batch_topics_subject ON batch_topics(subject_id)`,
+`CREATE INDEX IF NOT EXISTS idx_batch_contents_topic ON batch_contents(topic_id)`,
 `CREATE TABLE IF NOT EXISTS lectures (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   public_id TEXT UNIQUE NOT NULL,

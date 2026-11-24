@@ -125,6 +125,11 @@ webRoutes.get('/home', async (c) => {
      GROUP BY c.id ORDER BY lectures DESC, c.name LIMIT 12`);
   const monthTop = await q.all(
     `${LECTURE_SELECT} WHERE l.status = 'published' AND l.hidden = 0 ORDER BY ${MONTH_VIEWS} DESC, (l.likes * 3 + l.views) DESC LIMIT 8`);
+  const batches = await q.all(
+    `SELECT b.provider, b.external_id, b.slug, b.name, b.status, b.access, b.price, b.currency,
+            b.lecture_count, c.name AS company_name
+     FROM batches b LEFT JOIN companies c ON c.id = b.company_id
+     ORDER BY (b.status = 'running') DESC, b.created_at DESC LIMIT 12`);
   const courses = await q.all(
     `SELECT co.id, co.slug, co.title, co.year, e.name AS educator_name,
             COUNT(l.id) AS lecture_count
@@ -140,7 +145,7 @@ webRoutes.get('/home', async (c) => {
   const total = (await q.get(`SELECT COUNT(*) AS n FROM lectures WHERE status = 'published' AND hidden = 0`)).n;
   const educatorCount = (await q.get(`SELECT COUNT(*) AS n FROM educators`)).n;
   const companyCount = (await q.get(`SELECT COUNT(*) AS n FROM companies`)).n;
-  return c.json({ featured, trending, monthTop, top, recent, educators, companies, courses, subjects, countries,
+  return c.json({ featured, trending, monthTop, top, recent, educators, companies, courses, batches, subjects, countries,
     stats: { total, educators: educatorCount, companies: companyCount } });
 });
 

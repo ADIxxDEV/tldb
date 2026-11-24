@@ -1,0 +1,109 @@
+{
+  "provider": "pw",
+  "company": "Physics Wallah",
+  "company_domain": "pw.live",
+  "country": "India",
+  "_format": {
+    "_comment": "One batch with the institute's own structure: course → subject → topic → items. Metadata only: names, provider ids, threads and links. No files, no streams.",
+    "batch": {
+      "name": "batch / course name",
+      "external_id": "provider batch id (theirs, as text)",
+      "status": "running | ended | upcoming",
+      "access": "free | paid",
+      "price": "as printed by the institute (string, e.g. \"4,999\")",
+      "currency": "INR",
+      "certificate": "none | included | fee | exam",
+      "certification_note": "free text, what the institute actually says",
+      "starts_on": "YYYY-MM-DD",
+      "ends_on": "YYYY-MM-DD",
+      "purchase_url": "official page where the batch is bought",
+      "lecture_count": "number, optional"
+    },
+    "subjects[]": {
+      "name": "subject / folder name",
+      "external_id": "provider subject id",
+      "topics[]": {
+        "name": "topic / chapter",
+        "external_id": "provider topic id",
+        "items[]": {
+          "kind": "video | notes | pdf | test | dpp",
+          "title": "item title",
+          "external_id": "provider video / material id",
+          "duration_sec": "optional",
+          "url": "official page for that item, optional"
+        }
+      }
+    }
+  },
+  "batch": {
+    "name": "Lakshya JEE 2025",
+    "subtitle": "Hindi medium · JEE Main + Advanced",
+    "external_id": "64b7f2c9e1a2b3c4d5e6f701",
+    "status": "running",
+    "access": "paid",
+    "price": "4,999",
+    "currency": "INR",
+    "certificate": "fee",
+    "certification_note": "Certificate issued on request for a fee, per PW's own terms.",
+    "starts_on": "2024-05-06",
+    "ends_on": "",
+    "purchase_url": "https://www.pw.live/",
+    "language": "hi",
+    "lecture_count": 6,
+    "description": "Full-year JEE batch from Physics Wallah: Physics, Chemistry and Mathematics with daily lectures, notes and practice sheets."
+  },
+  "subjects": [
+    {
+      "name": "Physics",
+      "external_id": "64b7f2c9e1a2b3c4d5e6f702",
+      "topics": [
+        {
+          "name": "Kinematics",
+          "external_id": "64b7f2c9e1a2b3c4d5e6f703",
+          "items": [
+            { "kind": "video", "title": "Kinematics 01: Motion in a Straight Line", "external_id": "672a1b2c3d4e5f6a7b8c9d01", "duration_sec": 4200 },
+            { "kind": "video", "title": "Kinematics 02: Relative Motion", "external_id": "672a1b2c3d4e5f6a7b8c9d02", "duration_sec": 4500 },
+            { "kind": "notes", "title": "Kinematics — class notes", "external_id": "672a1b2c3d4e5f6a7b8c9d03" },
+            { "kind": "dpp", "title": "Kinematics — daily practice problems", "external_id": "672a1b2c3d4e5f6a7b8c9d04" }
+          ]
+        },
+        {
+          "name": "Ray Optics",
+          "external_id": "64b7f2c9e1a2b3c4d5e6f704",
+          "items": [
+            { "kind": "video", "title": "Ray Optics 01: Reflection and Spherical Mirrors", "external_id": "672a1b2c3d4e5f6a7b8c9d14", "duration_sec": 5100 },
+            { "kind": "pdf", "title": "Ray Optics — formula sheet", "external_id": "672a1b2c3d4e5f6a7b8c9d15" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Chemistry",
+      "external_id": "64b7f2c9e1a2b3c4d5e6f705",
+      "topics": [
+        {
+          "name": "Some Basic Concepts of Chemistry",
+          "external_id": "64b7f2c9e1a2b3c4d5e6f706",
+          "items": [
+            { "kind": "video", "title": "Mole Concept 01: Basics", "external_id": "672a1b2c3d4e5f6a7b8c9d21", "duration_sec": 3900 },
+            { "kind": "notes", "title": "Mole Concept — class notes", "external_id": "672a1b2c3d4e5f6a7b8c9d22" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Mathematics",
+      "external_id": "64b7f2c9e1a2b3c4d5e6f707",
+      "topics": [
+        {
+          "name": "Quadratic Equations",
+          "external_id": "64b7f2c9e1a2b3c4d5e6f708",
+          "items": [
+            { "kind": "video", "title": "Quadratic Equations 01: Roots and Nature", "external_id": "672a1b2c3d4e5f6a7b8c9d31", "duration_sec": 3600 },
+            { "kind": "test", "title": "Quadratic Equations — weekly test", "external_id": "672a1b2c3d4e5f6a7b8c9d32" }
+          ]
+        }
+      ]
+    }
+  ]
+}

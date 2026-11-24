@@ -80,6 +80,14 @@ function logoChip(c) {
     <span class="edu-name">${esc(c.name)}</span>
     <span class="edu-sub">${c.lectures} lecture${c.lectures === 1 ? '' : 's'}</span></a>`;
 }
+function batchCard(b) {
+  const st = { running: 'Running', ended: 'Ended', upcoming: 'Starts soon' }[b.status] || 'Status unknown';
+  const money = b.access === 'free' ? 'Free' : (b.price ? (b.currency === 'INR' ? '₹' : '') + b.price : 'Paid');
+  return `<a class="edu-card" href="#/batch/${esc(b.provider)}/${esc(b.external_id)}" title="${esc(b.name)}">
+    <span class="edu-name">${esc(b.name)}</span>
+    <span class="edu-sub">${esc(b.company_name || b.provider.toUpperCase())} · ${esc(st)} · ${esc(money)}</span>
+    <span class="mono muted" style="font-size:11px">${b.lecture_count ? b.lecture_count + ' items' : 'structure only'}</span></a>`;
+}
 function eduCard(e) {
   return `<a class="edu-card" href="#/educator/${esc(e.slug)}">
     ${avatar(e.name, e.image_url, 56)}
@@ -164,8 +172,8 @@ VIEWS.home = async (el) => {
     ${home.monthTop.length ? catalogRows(home.monthTop, 'month') : `<div class="empty">Not enough history yet — check back as the record grows.</div>`}
     <div class="section-head"><h2>Top rated records</h2><a href="#/browse">Full catalog →</a></div>
     ${catalogRows(home.top)}
-    <div class="section-head"><h2>Courses & playlists</h2></div>
-    ${home.courses?.length ? strip(home.courses, courseCard) : '<div class="empty">No courses yet — a course is a batch or playlist that groups lectures in order.</div>'}
+    <div class="section-head"><h2>Courses & batches</h2><span class="muted">an institute's own course structure</span></div>
+    ${(home.batches || []).length ? strip(home.batches, batchCard) : '<div class="empty">No courses yet — a course is a batch or playlist that groups lectures in order.</div>'}
     <div class="section-head"><h2>Top educators</h2></div>
     ${strip(home.educators, eduCard) || '<div class="empty">No educators on record yet.</div>'}
     <div class="section-head"><h2>Major companies</h2></div>
@@ -454,7 +462,7 @@ async function route() {
   const view = VIEWS[name];
   el.innerHTML = '<div class="empty">Loading…</div>';
   if (!view) { VIEWS.notfound(el); renderNav(); return; }
-  try { await view(el, { slug: parts[1], id: parts[1] }, query); }
+  try { await view(el, { slug: parts[1], id: parts[2] || parts[1] }, query); }
   catch (e) { el.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
   renderNav();
   window.scrollTo(0, 0);

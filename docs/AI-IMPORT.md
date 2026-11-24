@@ -100,6 +100,40 @@ Never invent an id. Copy the one the company gives you, as text.
 Bundled samples: `data/pw-sample.json` and `data/vibrant-sample.json` (each starts with a
 `_format` block describing every field).
 
+## 2b. Import a whole batch structure (course → subject → topic → items)
+
+```
+POST /api/admin/import-batch
+X-API-Key: <admin key>
+```
+
+```json
+{
+  "provider": "pw", "company": "Physics Wallah", "company_domain": "pw.live",
+  "batch": {
+    "name": "Lakshya JEE 2025", "external_id": "64b7...f701",
+    "status": "running", "access": "paid", "price": "4,999", "currency": "INR",
+    "certificate": "fee", "certification_note": "…", "starts_on": "2024-05-06",
+    "purchase_url": "https://www.pw.live/", "language": "hi", "lecture_count": 6
+  },
+  "subjects": [{
+    "name": "Physics", "external_id": "64b7...f702",
+    "topics": [{
+      "name": "Kinematics", "external_id": "64b7...f703",
+      "items": [
+        { "kind": "video", "title": "Kinematics 01", "external_id": "672a...9d01", "duration_sec": 4200 },
+        { "kind": "notes", "title": "Kinematics — class notes", "external_id": "672a...9d03" }
+      ]
+    }]
+  }]
+}
+```
+
+`kind` is `video | notes | pdf | test | dpp`. Re-importing the same `provider + external_id`
+replaces that batch's tree. Response: `{ok, batch_id, slug, subjects, topics, items}`.
+
+Bundled example: `data/pw-batch-sample.json`; CLI: `node scripts/import-batch.js <base> <email> <password> <file>`.
+
 ## 3. Read endpoints (public, no key needed for most)
 
 | endpoint | what it gives |
@@ -112,6 +146,8 @@ Bundled samples: `data/pw-sample.json` and `data/vibrant-sample.json` (each star
 | `GET /v1/lectures` — needs `read` key | JSON API version |
 | `GET /v1/batches?provider=pw` | every batch with id, name, lecture count |
 | `GET /v1/batches/:batchId` | the whole batch, ordered, with each lecture's video/subject/topic id |
+| `GET /api/batches?provider=pw&status=running` | batch/course cards — name, status, price, certificate |
+| `GET /api/batch/:provider/:externalId` | one batch: facts + full subject → topic → item tree |
 
 ## 4. Write endpoints
 

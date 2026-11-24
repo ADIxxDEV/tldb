@@ -7,6 +7,7 @@ import { webRoutes } from './routes/web.js';
 import { adminRoutes } from './routes/admin.js';
 import { v1Routes } from './routes/v1.js';
 import { writeRoutes } from './routes/write.js';
+import { batchRoutes } from './routes/batches.js';
 
 export function buildApp() {
   const app = new Hono();
@@ -24,6 +25,7 @@ export function buildApp() {
   app.use('/v1/*', attachAuth);
 
   app.route('/api', webRoutes);
+  app.route('/api', batchRoutes);
   app.route('/api', adminRoutes);
   app.route('/v1', v1Routes);
 
@@ -32,6 +34,7 @@ export function buildApp() {
   app.use('/v1/*', rateLimit(120, 60));
   app.route('/v1', writeRoutes);
   app.route('/v1', adminRoutes);
+  app.route('/v1', batchRoutes);
 
   app.get('/api/health', (c) => c.json({ ok: true, service: 'tldb', time: new Date().toISOString() }));
 

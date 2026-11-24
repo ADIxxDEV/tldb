@@ -76,7 +76,7 @@ function logoChip(c) {
     ? `<img src="https://www.google.com/s2/favicons?domain=${esc(c.domain)}&sz=128" alt="" width="44" height="44" loading="lazy"
         onerror="this.remove()">` : '';
   return `<a class="edu-card" href="#/company/${esc(c.slug)}" title="${esc(c.name)}">
-    <span class="avatar logo">${img}${c.domain ? '' : mono}</span>
+    <span class="avatar logo">${mono}${img}</span>
     <span class="edu-name">${esc(c.name)}</span>
     <span class="edu-sub">${c.lectures} lecture${c.lectures === 1 ? '' : 's'}</span></a>`;
 }
@@ -165,14 +165,14 @@ VIEWS.home = async (el) => {
     <div class="section-head"><h2>Top rated records</h2><a href="#/browse">Full catalog →</a></div>
     ${catalogRows(home.top)}
     <div class="section-head"><h2>Courses & playlists</h2></div>
-    ${home.courses?.length ? strip(home.courses, courseCard) : ''}
+    ${home.courses?.length ? strip(home.courses, courseCard) : '<div class="empty">No courses yet — a course is a batch or playlist that groups lectures in order.</div>'}
     <div class="section-head"><h2>Top educators</h2></div>
     ${strip(home.educators, eduCard) || '<div class="empty">No educators on record yet.</div>'}
     <div class="section-head"><h2>Major companies</h2></div>
     ${strip(home.companies, logoChip) || '<div class="empty">No companies on record yet.</div>'}
     <div class="section-head"><h2>Browse by subject</h2></div>
     ${home.subjects.length ? `<div class="chips">${home.subjects.map(s =>
-      `<a class="chip" href="#/browse?subject=${encodeURIComponent(s.subject)}">${esc(s.subject)} <span class="mono muted">${s.count}</span></a>`).join('')}</div>` : ''}
+      `<a class="chip" href="#/browse?subject=${encodeURIComponent(s.subject)}">${esc(s.subject)} <span class="mono muted">${s.count}</span></a>`).join('')}</div>` : '<div class="empty">No subjects yet — they appear as soon as the first record lands.</div>'}
     <div class="section-head"><h2>Recently catalogued</h2></div>
     ${catalogRows(home.recent)}`;
   $('#homeSearch').onsubmit = (e) => { e.preventDefault(); location.hash = '#/browse?query=' + encodeURIComponent(e.target.q.value.trim()); };

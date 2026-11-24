@@ -121,7 +121,7 @@ webRoutes.get('/home', async (c) => {
      GROUP BY e.id ORDER BY likes DESC, lectures DESC LIMIT 12`);
   const companies = await q.all(
     `SELECT c.slug, c.name, c.kind, c.domain, c.country, c.url, COUNT(l.id) AS lectures
-     FROM companies c JOIN lectures l ON l.company_id = c.id AND l.status = 'published'
+     FROM companies c LEFT JOIN lectures l ON l.company_id = c.id AND l.status = 'published'
      GROUP BY c.id ORDER BY lectures DESC, c.name LIMIT 12`);
   const monthTop = await q.all(
     `${LECTURE_SELECT} WHERE l.status = 'published' AND l.hidden = 0 ORDER BY ${MONTH_VIEWS} DESC, (l.likes * 3 + l.views) DESC LIMIT 8`);

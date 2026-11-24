@@ -71,7 +71,7 @@ Rules the importer enforces:
 **Idempotent:** a record is skipped if `provider + batch_id + external_id` already exists.
 Re-running an import is always safe.
 
-**Id hierarchy** (this is PW's own, from `api.penpencil.co`):
+**Id hierarchy — Physics Wallah** (provider key `pw`, from `api.penpencil.co`):
 
 ```
 batch_id  →  /v3/batches/{batch_id}/details
@@ -80,7 +80,25 @@ batch_id  →  /v3/batches/{batch_id}/details
           →  /v1/batches/{batch_id}/subject/{subject_id}/schedule/{video_id}/schedule-details
 ```
 
+**Id hierarchy — Vibrant Academy, Kota** (provider key `vibrant`, from
+`vibrantacademykotaapi.akamai.net.in`, header set `Client-Service: Appx`, `Auth-Key: appxapi`):
+
+```
+batch_id (course_id)  →  /get/folder_contentsv3?course_id={batch_id}&parent_id=-1
+                      →  subject_id (a folder row: material_type FOLDER)
+                      →  /get/folder_contentsv3?course_id={batch_id}&parent_id={subject_id}
+                      →  topic_id (child folder id)
+                      →  lecture_id (the row with material_type VIDEO)
+```
+
+Vibrant ids are opaque strings the platform hands out (`"1234"`, `"567890"`, `"567901"`,
+`"987654"`). Keep them **exactly** as given, as text — never renumber, never convert to a
+number, never reshape them into JSON keys or SQL columns. The same rule applies to PW.
+
 Never invent an id. Copy the one the company gives you, as text.
+
+Bundled samples: `data/pw-sample.json` and `data/vibrant-sample.json` (each starts with a
+`_format` block describing every field).
 
 ## 3. Read endpoints (public, no key needed for most)
 
@@ -113,7 +131,17 @@ Never invent an id. Copy the one the company gives you, as text.
 
 Anything with `/api/admin/*` also works under `/v1/admin/*`.
 
-## 5. A prompt you can hand to any AI
+## 5. Available providers
+
+| provider key | rights holder | domain |
+|---|---|---|
+| `pw` | Physics Wallah | pw.live |
+| `vibrant` | Vibrant Academy | vibrantacademy.com |
+
+Add a provider by sending a new `provider` key in the import payload — the company row is
+created automatically from `company` + `company_domain`.
+
+## 6. A prompt you can hand to any AI
 
 > You are filling the TLDB catalogue (a metadata-only lecture index at
 > https://tldb.eapp.workers.dev). Use the admin API key from the environment variable
@@ -126,7 +154,7 @@ Anything with `/api/admin/*` also works under `/v1/admin/*`.
 > into groups of ~50 records, check `created`/`skipped`/`failed` in each response, and
 > stop if `failed` is non-zero so a human can look.
 
-## 6. What is never acceptable
+## 7. What is never acceptable
 
 - Hosting, mirroring or proxying the video itself.
 - Bypassing DRM, collecting keys/tokens, or scraping signed stream URLs.

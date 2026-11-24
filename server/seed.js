@@ -1,4 +1,4 @@
-// Seed TLDB with the admin account and the Physics Wallah company record.
+// Seed TLDB with the admin account and the rights holders we list.
 // No lectures: the catalog starts empty and is filled through the contribute API
 // or the admin import endpoint (see docs/AI-IMPORT.md).
 'use strict';
@@ -17,15 +17,21 @@ if (!(await q.get(`SELECT id FROM users WHERE email = ?`, email))) {
   console.log('Admin already exists');
 }
 
-// ---- the one rights holder we list ----
-const companySlug = slugify('Physics Wallah');
-if (!(await q.get(`SELECT id FROM companies WHERE slug = ?`, companySlug))) {
+// ---- the rights holders we list ----
+const holders = [
+  { name: 'Physics Wallah', kind: 'publisher', domain: 'pw.live', country: 'India' },
+  { name: 'Vibrant Academy', kind: 'publisher', domain: 'vibrantacademy.com', country: 'India' },
+];
+for (const h of holders) {
+  const slug = slugify(h.name);
+  if (await q.get(`SELECT id FROM companies WHERE slug = ?`, slug)) {
+    console.log('Company already exists →', h.name);
+    continue;
+  }
   await q.run(
     `INSERT INTO companies (slug, name, kind, domain, country) VALUES (?,?,?,?,?)`,
-    companySlug, 'Physics Wallah', 'publisher', 'pw.live', 'India');
-  console.log('Company added → Physics Wallah (pw.live)');
-} else {
-  console.log('Company already exists → Physics Wallah');
+    slug, h.name, h.kind, h.domain, h.country);
+  console.log('Company added →', h.name, `(${h.domain})`);
 }
 
 const n = await q.get(`SELECT COUNT(*) AS c FROM lectures`);

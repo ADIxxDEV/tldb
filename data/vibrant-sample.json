@@ -1,0 +1,51 @@
+{
+  "provider": "vibrant",
+  "company": "Vibrant Academy",
+  "company_domain": "vibrantacademy.com",
+  "_format": {
+    "_comment": "Vibrant Academy (Kota) id chain, taken from its own app API (vibrantacademykotaapi.akamai.net.in). Ids are opaque strings the platform hands out — keep them exactly as given, as text. No JSON keys, no SQL columns, nothing reformatted.",
+    "batch_id": "course_id you enrolled/opened — the batch id",
+    "batch_name": "course name as shown in the app (e.g. 'Nurture JEE 2026')",
+    "subject_id": "parent folder id (get/folder_contentsv3?course_id=..&parent_id=-1)",
+    "topic_id": "child folder id inside the subject (parent_id = subject_id)",
+    "lecture_id": "video row id from folder_contentsv3 (material_type VIDEO)",
+    "access": "free | paid",
+    "educator": "faculty name",
+    "subject": "Physics / Chemistry / Mathematics / Biology",
+    "duration_sec": "length in seconds if the feed gives it",
+    "source_url": "where the lecture lives",
+    "purchase_url": "required when access = paid"
+  },
+  "records": [
+    {
+      "video_title": "Kinematics 1: Frame of Reference",
+      "batch_name": "Nurture JEE 2026",
+      "batch_id": "1234",
+      "subject_id": "567890",
+      "topic_id": "567901",
+      "lecture_id": "987654",
+      "access": "paid",
+      "educator": "Vibrant Faculty",
+      "subject": "Physics",
+      "duration_sec": 4200,
+      "language": "hi",
+      "source_url": "https://www.vibrantacademy.com/",
+      "purchase_url": "https://www.vibrantacademy.com/"
+    },
+    {
+      "video_title": "Mole Concept 1: Basics",
+      "batch_name": "Nurture JEE 2026",
+      "batch_id": "1234",
+      "subject_id": "567891",
+      "topic_id": "567910",
+      "lecture_id": "987661",
+      "access": "paid",
+      "educator": "Vibrant Faculty",
+      "subject": "Chemistry",
+      "duration_sec": 3900,
+      "language": "hi",
+      "source_url": "https://www.vibrantacademy.com/",
+      "purchase_url": "https://www.vibrantacademy.com/"
+    }
+  ]
+}

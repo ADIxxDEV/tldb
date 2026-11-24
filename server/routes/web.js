@@ -150,6 +150,7 @@ webRoutes.get('/lectures', async (c) => {
   const educator = c.req.query('educator') || '', source = c.req.query('source') || '';
   const country = c.req.query('country') || '', language = c.req.query('language') || '';
   const batch = c.req.query('batch') || '';
+  const access = c.req.query('access') || '', provider = c.req.query('provider') || '';
   const sort = SORTS[c.req.query('sort')] ? c.req.query('sort') : 'new';
   const page = Number(c.req.query('page')) || 1;
   const where = [`l.status = 'published'`];
@@ -163,6 +164,8 @@ webRoutes.get('/lectures', async (c) => {
   if (country) { where.push(`(e.country = ? OR c.country = ?)`); params.push(country, country); }
   if (language) { where.push(`l.language = ?`); params.push(language); }
   if (batch) { where.push(`l.batch_name = ?`); params.push(batch); }
+  if (access) { where.push(`l.access = ?`); params.push(access); }
+  if (provider) { where.push(`l.provider = ?`); params.push(provider); }
   const w = where.join(' AND ');
   const per = 24;
   const rows = await q.all(
@@ -177,7 +180,9 @@ webRoutes.get('/meta', async (c) => {
   const languages = await q.all(`SELECT language, COUNT(*) AS count FROM lectures WHERE status = 'published' AND hidden = 0 GROUP BY language ORDER BY count DESC`);
   const batches = await q.all(`SELECT batch_name, COUNT(*) AS count FROM lectures WHERE status = 'published' AND hidden = 0 AND batch_name != '' GROUP BY batch_name ORDER BY count DESC LIMIT 50`);
   const subjects = await q.all(`SELECT subject, COUNT(*) AS count FROM lectures WHERE status = 'published' AND hidden = 0 AND subject != '' GROUP BY subject ORDER BY count DESC`);
-  return c.json({ countries: countries.map(r => r.country), languages, batches, subjects });
+  const providers = await q.all(`SELECT provider, COUNT(*) AS count FROM lectures WHERE status = 'published' AND hidden = 0 AND provider != '' GROUP BY provider ORDER BY count DESC`);
+  const access = await q.all(`SELECT access, COUNT(*) AS count FROM lectures WHERE status = 'published' AND hidden = 0 GROUP BY access`);
+  return c.json({ countries: countries.map(r => r.country), languages, batches, subjects, providers, access });
 });
 
 webRoutes.get('/lectures/:slug', async (c) => {
@@ -344,6 +349,10 @@ export async function submitContribution(c) {
     company_domain: String(b.company_domain || '').trim(),
     course_name: String(b.course_name || '').trim(),   // optional playlist/course grouping
     batch_name: String(b.batch_name || '').trim(),     // original batch/cohort label
+    provider: String(b.provider || '').trim(),          // pw, unacademy, youtube ...
+    external_id: String(b.external_id || '').trim(),    // provider-side content id (non-numeric)
+    access: b.access === 'paid' ? 'paid' : 'free',
+    purchase_url: String(b.purchase_url || '').trim(),
     rights_holder: String(b.rights_holder || '').trim(),
     source_type: b.source_type,
     source_url: String(b.source_url).trim(),

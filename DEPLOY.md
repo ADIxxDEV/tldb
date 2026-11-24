@@ -82,3 +82,26 @@ D1 binding depending on the environment.
 ## Anti-abuse
 - Disposable/temp email domains are rejected at signup (curated blocklist + heuristics in `server/antibot.js`).
 - IP rate limits: 300 req/min on `/api/*`, 10 tries/min on `/api/auth/*` (brute-force), 120 req/min on the keyed `/v1/*`.
+
+## Provider formats (PW / Physics Wallah and friends)
+Records carry the fields an edtech catalogue actually uses:
+
+| field | meaning |
+|---|---|
+| `title` | video title |
+| `batch_name` | batch / course name (e.g. "Lakshya JEE 2025") |
+| `provider` | platform key — `pw`, `unacademy`, `youtube`, … |
+| `external_id` | the provider's own **non-numeric** content/lecture id — the same id the company uses |
+| `access` | `free` or `paid` |
+| `purchase_url` | official purchase page (required for paid) |
+| `educator` | teacher name |
+
+**Bulk import (admin only):** `POST /api/admin/import` with
+`{ "provider": "pw", "company": "Physics Wallah", "company_domain": "pw.live", "records": [ … ] }`
+Records are de-duplicated on `provider + external_id`, so re-running an import is safe.
+
+CLI helper: `node scripts/import-pw.js [base-url] [admin-email] [password] [file]`
+Sample + full format: `data/pw-sample.json`.
+
+Physics Wallah is seeded as a rights-holder company (pw.live) with three records in this format
+(two paid batch lectures, one free crash lecture).

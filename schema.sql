@@ -63,6 +63,10 @@ CREATE TABLE IF NOT EXISTS lectures (
   subject TEXT DEFAULT '',
   tags TEXT DEFAULT '[]',
   batch_name TEXT DEFAULT '',               -- original batch/cohort the lecture came from
+  provider TEXT DEFAULT '',                 -- source platform (pw, unacademy, youtube, ...)
+  external_id TEXT DEFAULT '',              -- the provider's own non-numeric content id (e.g. PW video id)
+  access TEXT DEFAULT 'free',               -- free | paid
+  purchase_url TEXT DEFAULT '',             -- where to buy when access = paid
   hidden INTEGER DEFAULT 0,                 -- 1 = unlisted: off the dashboard, found only via search/direct link
   year INTEGER,
   status TEXT NOT NULL DEFAULT 'pending',

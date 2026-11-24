@@ -1,0 +1,57 @@
+{
+  "provider": "pw",
+  "company": "Physics Wallah",
+  "company_domain": "pw.live",
+  "_format": {
+    "video_title": "title of the video as published",
+    "batch_name": "batch / course name (e.g. Lakshya JEE 2025)",
+    "id": "provider-side content id (non-numeric, as the company uses it)",
+    "lecture_id": "original content's lecture id — same non-numeric id the company gives",
+    "access": "free | paid",
+    "educator": "teacher name",
+    "subject": "optional subject",
+    "duration_sec": "optional length in seconds",
+    "source_url": "where the content lives (optional)",
+    "purchase_url": "required when access = paid — official purchase page"
+  },
+  "records": [
+    {
+      "video_title": "Kinematics 01: Motion in a Straight Line",
+      "batch_name": "Lakshya JEE 2025",
+      "id": "pw_yl_101",
+      "lecture_id": "pw_yl_101",
+      "access": "paid",
+      "educator": "Alakh Pandey",
+      "subject": "Physics",
+      "duration_sec": 4200,
+      "language": "hi",
+      "source_url": "https://www.pw.live/",
+      "purchase_url": "https://www.pw.live/"
+    },
+    {
+      "video_title": "Ray Optics 01: Reflection and Spherical Mirrors",
+      "batch_name": "Arjuna NEET 2025",
+      "id": "pw_yl_214",
+      "lecture_id": "pw_yl_214",
+      "access": "paid",
+      "educator": "Alakh Pandey",
+      "subject": "Physics",
+      "duration_sec": 5100,
+      "language": "hi",
+      "source_url": "https://www.pw.live/",
+      "purchase_url": "https://www.pw.live/"
+    },
+    {
+      "video_title": "IUPAC Nomenclature: Free Crash Lecture",
+      "batch_name": "PW Free Crash Course",
+      "id": "pw_yt_crash_007",
+      "lecture_id": "pw_yt_crash_007",
+      "access": "free",
+      "educator": "Amit Mahajan",
+      "subject": "Chemistry",
+      "duration_sec": 3300,
+      "language": "hi",
+      "source_url": "https://www.youtube.com/@PhysicsWallah"
+    }
+  ]
+}

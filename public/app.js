@@ -189,6 +189,8 @@ VIEWS.browse = async (el, params, query) => {
     country: query.get('country') || '',
     language: query.get('language') || '',
     batch: query.get('batch') || '',
+    access: query.get('access') || '',
+    provider: query.get('provider') || '',
     source: query.get('source') || '',
     educator: query.get('educator') || '',
   };
@@ -224,6 +226,8 @@ VIEWS.browse = async (el, params, query) => {
       ${sel('fLanguage', 'Any language', meta.languages.map(x => ({ v: x.language, t: `${x.language} (${x.count})` })), cur.language)}
       ${sel('fSubject', 'Any subject', meta.subjects.map(x => ({ v: x.subject, t: `${x.subject} (${x.count})` })), cur.subject)}
       ${sel('fBatch', 'Any batch', meta.batches.map(x => ({ v: x.batch_name, t: `${x.batch_name} (${x.count})` })), cur.batch)}
+      ${sel('fAccess', 'Free or paid', [{ v: 'free', t: 'Free' }, { v: 'paid', t: 'Paid' }], cur.access)}
+      ${meta.providers && meta.providers.length ? sel('fProvider', 'Any provider', meta.providers.map(x => ({ v: x.provider, t: `${x.provider.toUpperCase()} (${x.count})` })), cur.provider) : ''}
       ${sel('fSource', 'Any source', ['youtube', 'archive', 'torrent', 'file', 'stream', 'other'].map(x => ({ v: x, t: x })), cur.source)}
       ${Object.values(cur).some(Boolean) ? '<a class="btn small" href="' + buildHash(Object.fromEntries(Object.keys(cur).map(k => [k, '']))) + '">Clear filters</a>' : ''}
     </div>
@@ -234,7 +238,7 @@ VIEWS.browse = async (el, params, query) => {
     </div>` : ''}`;
   $('#browseSearch').onsubmit = (e) => { e.preventDefault(); location.hash = '#/browse?query=' + encodeURIComponent(e.target.q.value.trim()); };
   const apply = (key, value) => { location.hash = buildHash({ [key]: value }); };
-  [['fSort', 'sort'], ['fCountry', 'country'], ['fLanguage', 'language'], ['fSubject', 'subject'], ['fBatch', 'batch'], ['fSource', 'source']].forEach(([id, key]) => {
+  [['fSort', 'sort'], ['fCountry', 'country'], ['fLanguage', 'language'], ['fSubject', 'subject'], ['fBatch', 'batch'], ['fAccess', 'access'], ['fProvider', 'provider'], ['fSource', 'source']].forEach(([id, key]) => {
     $('#' + id).onchange = (e) => apply(key, e.target.value);
   });
 };
@@ -263,6 +267,10 @@ VIEWS.lecture = async (el, params) => {
         <p>${esc(l.description || 'No description on record yet.')}</p>
         <dl class="kv">
           <dt>source</dt><dd><span class="badge gold">${esc(srcLabel)}</span></dd>
+          ${l.provider ? `<dt>provider</dt><dd><span class="badge">${esc(l.provider.toUpperCase())}</span>${l.external_id ? ` <span class="mono muted">video id ${esc(l.external_id)}</span>` : ''}</dd>` : ''}
+          <dt>access</dt><dd>${l.access === 'paid'
+            ? `<span class="badge red">Paid</span>${l.purchase_url ? ` <a href="${esc(l.purchase_url)}" target="_blank" rel="noopener">Buy from the rights holder ↗</a>` : ' — buy from the rights holder'}`
+            : `<span class="badge sage">Free to watch</span>`}</dd>
           <dt>location</dt><dd><a href="${esc(l.source_url)}" target="_blank" rel="noopener">${esc(l.source_url)}</a></dd>
           <dt>rights</dt><dd>${esc(l.rights_holder || 'On record: unspecified')}${l.company_name ? ` (${esc(l.company_name)})` : ''}</dd>
           <dt>subject</dt><dd>${esc(l.subject || '—')}</dd>
@@ -279,7 +287,9 @@ VIEWS.lecture = async (el, params) => {
           return `<div class="ratio" title="${pct}% of voters liked this"><div class="ratio-bar"><span style="width:${pct}%"></span></div><span class="mono muted">${pct}% liked · ${total} vote${total === 1 ? '' : 's'}</span></div>`;
         })()}
         <div class="actions">
-          <a class="btn primary" href="${esc(l.source_url)}" target="_blank" rel="noopener">Open at source ↗</a>
+          ${l.access === 'paid'
+            ? `<a class="btn primary" href="${esc(l.purchase_url || l.source_url)}" target="_blank" rel="noopener">Buy / unlock at source ↗</a>`
+            : `<a class="btn primary" href="${esc(l.source_url)}" target="_blank" rel="noopener">Open at source ↗</a>`}
           <button class="btn" id="saveBtn">${data.saved ? '★ Saved' : '☆ Save to my list'}</button>
           <button class="btn" id="likeBtn">▲ Like <span class="vote muted">${l.likes}</span></button>
           <button class="btn" id="dislikeBtn">▼ Dislike <span class="vote muted">${l.dislikes}</span></button>

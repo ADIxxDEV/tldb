@@ -107,7 +107,15 @@ VIEWS.contribute = async (el) => {
         <div><label class="f" for="du">Duration (minutes)</label><input class="plain" id="du" type="number" min="0"></div>
         <div><label class="f" for="tg">Tags (comma separated)</label><input class="plain" id="tg" placeholder="algorithms, cs"></div>
         <div><label class="f" for="cn">Course / playlist (optional — groups same-topic lectures)</label><input class="plain" id="cn" placeholder="e.g. MIT 6.006 — full course"></div>
-        <div><label class="f" for="bn">Batch name (optional — original batch/cohort)</label><input class="plain" id="bn" placeholder="e.g. Lakshya JEE 2024, CS50 2024"></div>
+        <div><label class="f" for="bn">Batch name (optional — original batch/cohort)</label><input class="plain" id="bn" placeholder="e.g. Lakshya JEE 2025, CS50 2024"></div>
+        <div class="row2">
+          <div><label class="f" for="pv">Provider (optional)</label><input class="plain" id="pv" placeholder="pw, unacademy, youtube"></div>
+          <div><label class="f" for="ax">Access</label><select class="plain" id="ax"><option value="free">Free to watch</option><option value="paid">Paid (links to purchase)</option></select></div>
+        </div>
+        <div class="row2">
+          <div><label class="f" for="ei">Provider content ID (optional)</label><input class="plain" id="ei" placeholder="the id the company uses, e.g. pw_101"></div>
+          <div><label class="f" for="pu">Purchase URL (paid only)</label><input class="plain" id="pu" placeholder="https://…"></div>
+        </div>
         <div style="grid-column:1/-1"><label class="f" for="ds">Description</label><textarea id="ds"></textarea></div>
         <div style="grid-column:1/-1"><button class="btn primary" type="submit">Submit for review</button></div>
       </form></div>
@@ -127,6 +135,7 @@ VIEWS.contribute = async (el) => {
       await api('/contributions', { method: 'POST', body: {
         title: v('t'), educator_name: v('ed'), company_name: v('co'), rights_holder: v('rh'),
         course_name: v('cn'), batch_name: v('bn'),
+        provider: v('pv'), external_id: v('ei'), access: v('ax'), purchase_url: v('pu'),
         source_type: v('st'), source_url: v('su'), subject: v('sj'), year: v('yr'),
         duration_sec: (Number(v('du')) || 0) * 60,
         tags: v('tg') ? v('tg').split(',').map(s => s.trim()).filter(Boolean) : [],

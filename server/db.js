@@ -83,6 +83,10 @@ export const SCHEMA_STATEMENTS = [
   subject TEXT DEFAULT '',
   tags TEXT DEFAULT '[]',
   batch_name TEXT DEFAULT '',               -- original batch/cohort the lecture came from
+  provider TEXT DEFAULT '',                 -- source platform (pw, unacademy, youtube, ...)
+  external_id TEXT DEFAULT '',              -- the provider's own non-numeric content id (e.g. PW video id)
+  access TEXT DEFAULT 'free',               -- free | paid
+  purchase_url TEXT DEFAULT '',             -- where to buy when access = paid
   hidden INTEGER DEFAULT 0,                 -- 1 = unlisted: off the dashboard, found only via search/direct link
   year INTEGER,
   status TEXT NOT NULL DEFAULT 'pending',
@@ -182,6 +186,10 @@ export async function ensureSchema() {
     ['lectures', 'position', 'INTEGER'],
     ['lectures', 'source_status', "TEXT DEFAULT 'ok'"],
     ['lectures', 'batch_name', "TEXT DEFAULT ''"],
+    ['lectures', 'provider', "TEXT DEFAULT ''"],
+    ['lectures', 'external_id', "TEXT DEFAULT ''"],
+    ['lectures', 'access', "TEXT DEFAULT 'free'"],
+    ['lectures', 'purchase_url', "TEXT DEFAULT ''"],
     ['lectures', 'hidden', 'INTEGER DEFAULT 0'],
   ];
   for (const [table, col, def] of addCols) {

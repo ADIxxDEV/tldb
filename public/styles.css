@@ -279,6 +279,9 @@ select.filter { width: auto; padding: 8px 12px; font-size: 13.5px; margin: 0; }
 
 /* skeleton loading placeholders end */
 
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 720px) { .row2 { grid-template-columns: 1fr; } }
+
 /* toast */
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);

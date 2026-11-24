@@ -2,6 +2,7 @@
 'use strict';
 import crypto from 'node:crypto';
 import { Hono } from 'hono';
+import { tokens, rank, closest } from '../search.js';
 import { setCookie, deleteCookie } from 'hono/cookie';
 import { q, hashPassword, verifyPassword, sha256, slugify, logView } from '../db.js';
 import { isTempEmail, verifyTurnstile, turnstileConfig } from '../antibot.js';
@@ -151,18 +152,20 @@ webRoutes.get('/home', async (c) => {
 
 // ---------- catalog (public read) ----------
 webRoutes.get('/lectures', async (c) => {
-  const query = c.req.query('query') || '', subject = c.req.query('subject') || '';
+  const query = (c.req.query('query') || '').trim(), subject = c.req.query('subject') || '';
   const educator = c.req.query('educator') || '', source = c.req.query('source') || '';
   const country = c.req.query('country') || '', language = c.req.query('language') || '';
   const batch = c.req.query('batch') || '';
   const access = c.req.query('access') || '', provider = c.req.query('provider') || '';
   const sort = SORTS[c.req.query('sort')] ? c.req.query('sort') : 'new';
   const page = Number(c.req.query('page')) || 1;
+  const per = 24;
+  const toks = tokens(query);
+
   const where = [`l.status = 'published'`];
   const params = [];
   // hidden records stay off the listings — they only surface when actively searched
-  if (!query) where.push(`l.hidden = 0`);
-  if (query) { where.push(`(l.title LIKE ? OR l.description LIKE ? OR l.tags LIKE ? OR l.batch_name LIKE ?)`); const like = `%${query}%`; params.push(like, like, like, like); }
+  if (!toks.length) where.push(`l.hidden = 0`);
   if (subject) { where.push(`l.subject LIKE ?`); params.push(`%${subject}%`); }
   if (source) { where.push(`l.source_type = ?`); params.push(source); }
   if (educator) { where.push(`e.slug = ?`); params.push(educator); }
@@ -171,12 +174,116 @@ webRoutes.get('/lectures', async (c) => {
   if (batch) { where.push(`l.batch_name = ?`); params.push(batch); }
   if (access) { where.push(`l.access = ?`); params.push(access); }
   if (provider) { where.push(`l.provider = ?`); params.push(provider); }
-  const w = where.join(' AND ');
-  const per = 24;
-  const rows = await q.all(
-    `${LECTURE_SELECT_SCORED} WHERE ${w} ORDER BY ${SORTS[sort]} LIMIT ? OFFSET ?`, ...params, per, (page - 1) * per);
-  const { n } = await q.get(`SELECT COUNT(*) AS n FROM lectures l LEFT JOIN educators e ON e.id = l.educator_id LEFT JOIN companies c ON c.id = l.company_id WHERE ${w}`, ...params);
-  return c.json({ lectures: rows, total: n, page, pages: Math.max(1, Math.ceil(n / per)), sort });
+  const base = where.join(' AND ');
+  const countOf = async (w, p) => (await q.get(
+    `SELECT COUNT(*) AS n FROM lectures l LEFT JOIN educators e ON e.id = l.educator_id
+     LEFT JOIN companies c ON c.id = l.company_id WHERE ${w}`, ...p)).n;
+
+  if (toks.length) {
+    const cols = ['l.title', 'l.subject', 'l.batch_name', 'l.tags', 'l.description', 'e.name', 'c.name'];
+    // every word must land somewhere…
+    const strict = [...toks.map(() => `(${cols.map((col) => `${col} LIKE ?`).join(' OR ')})`)].join(' AND ');
+    const strictParams = toks.flatMap((t) => cols.map(() => `%${t}%`));
+    let n = await countOf(`${base} AND ${strict}`, [...params, ...strictParams]);
+    let w = `${base} AND ${strict}`, p = [...params, ...strictParams];
+    if (!n) {
+      // …or any word may land, closer to how people actually search
+      const loose = `(${cols.map((col) => `${col} LIKE ?`).join(' OR ')})`;
+      const looseParams = toks.flatMap((t) => cols.map(() => `%${t}%`));
+      n = await countOf(`${base} AND ${loose}`, [...params, ...looseParams]);
+      w = `${base} AND ${loose}`; p = [...params, ...looseParams];
+    }
+    if (n >= 3) {
+      const rows = await q.all(`${LECTURE_SELECT_SCORED} WHERE ${w} ORDER BY ${SORTS[sort]} LIMIT ? OFFSET ?`,
+        ...p, per, (page - 1) * per);
+      return c.json({ lectures: rows, total: n, page, pages: Math.max(1, Math.ceil(n / per)), sort, fuzzy: false, corrected: null });
+    }
+    // few or no text hits → rank the whole filtered set in JS (typos, partial words, wrong spelling)
+    const pool = await q.all(`${LECTURE_SELECT_SCORED} WHERE ${base} ORDER BY ${SORTS[sort]} LIMIT 1200`, ...params);
+    const ranked = rank(toks, pool, (r) => [r.title, r.subject, r.batch_name, r.educator_name, r.company_name, r.tags, r.description],
+      { limit: 200 });
+    const vocab = new Set();
+    for (const r of pool) {
+      for (const w of [r.title, r.subject, r.batch_name, r.educator_name, r.company_name]) {
+        for (const word of String(w || '').split(/\s+/)) if (word.length > 2) vocab.add(word);
+      }
+    }
+    const corrected = closest(toks, [...vocab]);
+    const clean = ranked.map(({ _score, ...r }) => r);
+    return c.json({
+      lectures: clean.slice((page - 1) * per, page * per), total: clean.length, page,
+      pages: Math.max(1, Math.ceil(clean.length / per)), sort,
+      fuzzy: clean.length > 0, corrected: corrected && corrected !== toks.join(' ') ? corrected : null,
+    });
+  }
+
+  const rows = await q.all(`${LECTURE_SELECT_SCORED} WHERE ${base} ORDER BY ${SORTS[sort]} LIMIT ? OFFSET ?`,
+    ...params, per, (page - 1) * per);
+  const n = await countOf(base, params);
+  return c.json({ lectures: rows, total: n, page, pages: Math.max(1, Math.ceil(n / per)), sort, fuzzy: false, corrected: null });
+});
+
+// ---------- type-ahead suggestions ----------
+webRoutes.get('/suggest', async (c) => {
+  const qq = (c.req.query('q') || '').trim();
+  const limit = Math.min(Number(c.req.query('limit')) || 6, 12);
+  if (qq.length < 2) return c.json({ items: [], corrected: null });
+  const toks = tokens(qq);
+  const items = [];
+
+  const lectures = await q.all(
+    `SELECT l.slug, l.title, l.subject, l.batch_name, e.name AS educator_name
+     FROM lectures l LEFT JOIN educators e ON e.id = l.educator_id
+     WHERE l.status = 'published' AND l.hidden = 0 LIMIT 800`);
+  for (const r of rank(toks, lectures, (x) => [x.title, x.subject, x.batch_name, x.educator_name], { limit: 5, min: 0.3 })) {
+    items.push({ type: 'lecture', label: r.title, sub: [r.educator_name, r.subject].filter(Boolean).join(' · '),
+      href: '#/lecture/' + encodeURIComponent(r.slug), score: r._score });
+  }
+
+  const batches = await q.all(
+    `SELECT b.provider, b.external_id, b.name, b.status, co.name AS company_name
+     FROM batches b LEFT JOIN companies co ON co.id = b.company_id LIMIT 400`);
+  for (const r of rank(toks, batches, (x) => [x.name, x.company_name, x.provider], { limit: 3, min: 0.32 })) {
+    items.push({ type: 'batch', label: r.name, sub: [r.company_name, r.status].filter(Boolean).join(' · '),
+      href: '#/batch/' + encodeURIComponent(r.provider) + '/' + encodeURIComponent(r.external_id), score: r._score });
+  }
+
+  const educators = await q.all(`SELECT slug, name, country FROM educators LIMIT 400`);
+  for (const r of rank(toks, educators, (x) => [x.name, x.country], { limit: 3, min: 0.36 })) {
+    items.push({ type: 'educator', label: r.name, sub: 'Educator', href: '#/educator/' + encodeURIComponent(r.slug), score: r._score });
+  }
+
+  const companies = await q.all(`SELECT slug, name, domain, country FROM companies LIMIT 400`);
+  for (const r of rank(toks, companies, (x) => [x.name, x.domain, x.country], { limit: 3, min: 0.36 })) {
+    items.push({ type: 'company', label: r.name, sub: r.domain ? 'Rights holder · ' + r.domain : 'Rights holder',
+      href: '#/company/' + encodeURIComponent(r.slug), score: r._score });
+  }
+
+  // topics live inside course structures — a search for "kinematics" should still land somewhere
+  const topics = await q.all(
+    `SELECT bc.title, bc.kind, b.name AS batch_name, b.provider, b.external_id, bt.name AS topic_name, bs.name AS subject_name
+     FROM batch_contents bc
+     JOIN batch_topics bt ON bt.id = bc.topic_id
+     JOIN batch_subjects bs ON bs.id = bt.subject_id
+     JOIN batches b ON b.id = bs.batch_id LIMIT 600`);
+  for (const r of rank(toks, topics, (x) => [x.title, x.topic_name, x.subject_name, x.batch_name], { limit: 4, min: 0.34 })) {
+    items.push({ type: 'topic', label: r.title, sub: `${r.subject_name} › ${r.topic_name} · ${r.batch_name}`,
+      href: '#/batch/' + encodeURIComponent(r.provider) + '/' + encodeURIComponent(r.external_id), score: r._score });
+  }
+
+  const subjects = await q.all(`SELECT DISTINCT subject FROM lectures WHERE status = 'published' AND hidden = 0 AND subject != '' LIMIT 200`);
+  for (const r of rank(toks, subjects, (x) => [x.subject], { limit: 2, min: 0.4 })) {
+    items.push({ type: 'subject', label: r.subject, sub: 'Subject', href: '#/browse?subject=' + encodeURIComponent(r.subject), score: r._score });
+  }
+
+  items.sort((a, b) => b.score - a.score);
+  const vocab = [];
+  for (const r of [...lectures, ...batches, ...educators, ...companies, ...subjects, ...topics]) {
+    for (const f of Object.values(r)) if (typeof f === 'string') vocab.push(...f.split(/\s+/));
+  }
+  const corrected = closest(toks, vocab);
+  return c.json({ items: items.slice(0, limit).map(({ score, ...i }) => i),
+    corrected: corrected !== toks.join(' ') ? corrected : null, total: items.length });
 });
 
 // filter metadata for the browse bar

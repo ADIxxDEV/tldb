@@ -41,8 +41,8 @@ function renderNav() {
 }
 
 // ---------- shared renderers ----------
-function catalogRows(lectures, showViews = false) {
-  if (!lectures.length) return '<div class="empty">Nothing catalogued here yet. Be the first to <a href="#/contribute">contribute a record</a>.</div>';
+function catalogRows(lectures, showViews = false, quiet = false) {
+  if (!lectures.length) return quiet ? '' : '<div class="empty">Nothing catalogued here yet. Be the first to <a href="#/contribute">contribute a record</a>.</div>';
   return `<div class="catalog">` + lectures.map(l => {
     const viewsLabel = showViews === 'month' && l.month_views ? `${l.month_views} views this month`
       : showViews === 'week' && l.week_views ? `${l.week_views} views this week` : '';
@@ -272,7 +272,7 @@ VIEWS.browse = async (el, params, query) => {
     </select>`;
   const heading = q ? `Results for “${esc(q)}”` : cur.subject ? `${esc(cur.subject)} records` : cur.educator ? 'Educator records' : cur.batch ? `${esc(cur.batch)} records` : cur.country ? `Records from ${esc(cur.country)}` : 'The catalog';
   const hasFilters = Object.entries(cur).some(([k, v]) => k !== 'sort' && v);
-  if (!data.total && !hasFilters) {
+  if (!data.total && !hasFilters && !q) {
     // an empty catalog should read as an invitation, not a broken filter bar
     el.innerHTML = `
       <div class="section-head" style="margin-top:0"><h1>${heading}</h1></div>
@@ -293,8 +293,10 @@ VIEWS.browse = async (el, params, query) => {
   el.innerHTML = `
     <div class="section-head" style="margin-top:0">
       <h1>${heading}</h1>
-      <span class="muted">${data.total} record${data.total === 1 ? '' : 's'}</span>
+      <span class="muted">${data.total} record${data.total === 1 ? '' : 's'}${data.fuzzy ? ' · closest matches' : ''}</span>
     </div>
+    ${data.corrected ? `<p class="search-hint">Nothing matched “${esc(q)}” exactly — showing results for
+      <a href="#/browse?query=${encodeURIComponent(data.corrected)}">${esc(data.corrected)}</a>.</p>` : ''}
     <form class="searchbar" id="browseSearch" style="margin:18px 0 10px;max-width:480px">
       <input name="q" value="${esc(q)}" placeholder="Search titles, descriptions, tags" aria-label="Search lectures">
       <button type="submit">Search</button>
@@ -310,12 +312,27 @@ VIEWS.browse = async (el, params, query) => {
       ${sel('fSource', 'Any source', ['youtube', 'archive', 'torrent', 'file', 'stream', 'other'].map(x => ({ v: x, t: x })), cur.source)}
       ${Object.values(cur).some(Boolean) ? '<a class="btn small" href="' + buildHash(Object.fromEntries(Object.keys(cur).map(k => [k, '']))) + '">Clear filters</a>' : ''}
     </div>
-    ${catalogRows(data.lectures)}
+    ${!data.total && q ? `<div class="empty" id="treeHint" style="padding:26px 0">
+        <p class="muted">No catalogued records match “${esc(q)}”.</p></div>` : ''}
+    ${catalogRows(data.lectures, false, !!q)}
     ${data.pages > 1 ? `<div class="actions" style="margin-top:22px">
       ${page > 1 ? `<a class="btn" href="${buildHash({})}&page=${page - 1}">← Newer</a>` : ''}
       ${page < data.pages ? `<a class="btn" href="${buildHash({})}&page=${page + 1}">Older →</a>` : ''}
     </div>` : ''}`;
   $('#browseSearch').onsubmit = (e) => { e.preventDefault(); location.hash = '#/browse?query=' + encodeURIComponent(e.target.q.value.trim()); };
+  if (!data.total && q) {
+    api('/suggest?q=' + encodeURIComponent(q)).then(sug => {
+      const hits = (sug.items || []).filter(i => i.type === 'topic' || i.type === 'batch');
+      const box = $('#treeHint');
+      if (!box) return;
+      if (!hits.length) {
+        box.innerHTML = `<p class="muted">Nothing catalogued for this phrase yet — <a href="#/contribute">add the record</a> or try a shorter word.</p>`;
+        return;
+      }
+      box.innerHTML = `<p class="muted" style="margin-bottom:10px">But the phrase does appear in the course structures:</p>
+        <div class="actions">${hits.map(i => `<a class="btn" href="${i.href}">${esc(i.label)} <span class="muted">· ${esc(i.sub)}</span></a>`).join('')}</div>`;
+    }).catch(() => {});
+  }
   const apply = (key, value) => { location.hash = buildHash({ [key]: value }); };
   [['fSort', 'sort'], ['fCountry', 'country'], ['fLanguage', 'language'], ['fSubject', 'subject'], ['fBatch', 'batch'], ['fAccess', 'access'], ['fProvider', 'provider'], ['fSource', 'source']].forEach(([id, key]) => {
     const node = $('#' + id);
@@ -523,7 +540,188 @@ VIEWS.forbidden = (el) => {
     </div>`;
 };
 
+// ---------- search type-ahead ----------
+// Every search input gets live suggestions: forgiving matching is done server-side,
+// so a half-typed or misspelled word still surfaces the record it was meant for.
+function highlight(text, q) {
+  const words = String(q || '').toLowerCase().split(/\s+/).filter(w => w.length > 1);
+  let out = esc(text);
+  for (const w of words) {
+    const safe = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    out = out.replace(new RegExp(`(${safe})`, 'ig'), '<mark>$1</mark>');
+  }
+  return out;
+}
+
+const SUG_ICON = { lecture: '▶', batch: '◈', educator: '✎', company: '▤', subject: '≡', topic: '↳' };
+
+function attachTypeahead(input) {
+  if (!input || input.dataset.typeahead) return;
+  input.dataset.typeahead = '1';
+  const field = document.createElement('div');
+  field.className = 'search-field';
+  input.parentNode.insertBefore(field, input);
+  field.appendChild(input);
+  const panel = document.createElement('div');
+  panel.className = 'suggest';
+  panel.setAttribute('role', 'listbox');
+  panel.id = (input.id || 'search') + '-suggest';
+  panel.hidden = true;
+  field.appendChild(panel);
+  input.setAttribute('autocomplete', 'off');
+  input.setAttribute('aria-autocomplete', 'list');
+  input.setAttribute('aria-controls', panel.id);
+  input.setAttribute('aria-expanded', 'false');
+
+  let items = [], active = -1, timer = null;
+
+  const close = () => { panel.hidden = true; active = -1; input.setAttribute('aria-expanded', 'false'); };
+  const open = () => { panel.hidden = false; input.setAttribute('aria-expanded', 'true'); };
+  const paint = (data, q) => {
+    items = data.items || [];
+    if (!items.length && !data.corrected) { close(); return; }
+    const rows = items.map((it, i) => `
+      <a class="sug" role="option" id="${panel.id}-${i}" href="${it.href}" data-i="${i}">
+        <span class="sug-type" aria-hidden="true">${SUG_ICON[it.type] || '·'}</span>
+        <span class="sug-main"><span class="sug-label">${highlight(it.label, q)}</span>
+          <span class="sug-sub">${esc(it.sub || it.type)}</span></span>
+      </a>`).join('');
+    const hint = data.corrected
+      ? `<div class="sug-hint">No exact match — did you mean <button type="button" class="sug-fix" data-fix="${esc(data.corrected)}">${esc(data.corrected)}</button>?</div>`
+      : '';
+    panel.innerHTML = rows + hint;
+    panel.querySelectorAll('[data-fix]').forEach(b => {
+      b.onmousedown = (e) => e.preventDefault();
+      b.onclick = () => {
+        input.value = b.dataset.fix;
+        if (input.form && input.form.requestSubmit) input.form.requestSubmit();
+        else if (input.form) input.form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+        close();
+      };
+    });
+    open();
+  };
+
+  const ask = (q) => {
+    if (q.length < 2) { close(); return; }
+    fetch(`/api/suggest?q=${encodeURIComponent(q)}`, { headers: { accept: 'application/json' } })
+      .then(r => r.ok ? r.json() : { items: [] })
+      .then(d => { if (input.value.trim() === q) paint(d, q); })
+      .catch(() => close());
+  };
+
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (q.length < 2) { close(); return; }
+    timer = setTimeout(() => ask(q), 110);
+  });
+
+  const move = (delta) => {
+    if (panel.hidden) { ask(input.value.trim()); return; }
+    const opts = [...panel.querySelectorAll('.sug')];
+    if (!opts.length) return;
+    active = (active + delta + opts.length) % opts.length;
+    opts.forEach((o, i) => {
+      const on = i === active;
+      o.classList.toggle('active', on);
+      o.setAttribute('aria-selected', on ? 'true' : 'false');
+      if (on) { o.scrollIntoView({ block: 'nearest' }); input.setAttribute('aria-activedescendant', o.id); }
+    });
+  };
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+    else if (e.key === 'Escape') { close(); }
+    else if (e.key === 'Enter') {
+      const opts = [...panel.querySelectorAll('.sug')];
+      if (!panel.hidden && opts[active >= 0 ? active : 0]) {
+        // first Enter opens the top hit, so a typo still gets you where you meant to go
+        e.preventDefault();
+        location.hash = opts[active >= 0 ? active : 0].getAttribute('href');
+        close();
+      }
+    }
+  });
+  input.addEventListener('blur', () => setTimeout(close, 120));
+  input.addEventListener('focus', () => { if (input.value.trim().length >= 2) ask(input.value.trim()); });
+}
+
+// ---------- custom select (a native <select> looks wrong in this theme) ----------
+const CHEVRON = '<svg class="select-chev" width="10" height="6" viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
+
+function upgradeSelect(sel) {
+  if (!sel || sel.dataset.upgraded) return;
+  sel.dataset.upgraded = '1';
+  const opts = [...sel.options].map(o => ({ v: o.value, t: o.textContent }));
+  const box = document.createElement('div');
+  box.className = 'select';
+  box.innerHTML = `<button type="button" class="select-btn" aria-haspopup="listbox" aria-expanded="false">
+      <span class="select-label"></span>${CHEVRON}</button>
+    <div class="select-menu" role="listbox" hidden></div>`;
+  sel.classList.add('select-native');
+  sel.after(box);
+  const btn = box.querySelector('.select-btn');
+  const label = box.querySelector('.select-label');
+  const menu = box.querySelector('.select-menu');
+  const syncLabel = () => {
+    const hit = opts.find(o => o.v === sel.value);
+    label.textContent = hit && hit.v !== '' ? hit.t : (opts[0]?.t || 'Any');
+    box.classList.toggle('is-set', sel.value !== '');
+  };
+  const paint = () => {
+    menu.innerHTML = opts.map((o, i) => `<button type="button" class="select-item" role="option"
+        data-i="${i}" aria-selected="${o.v === sel.value ? 'true' : 'false'}">
+        <span>${esc(o.t)}</span>${o.v === sel.value ? '<span class="tick" aria-hidden="true">✓</span>' : ''}</button>`).join('');
+  };
+  const close = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); box.classList.remove('open'); };
+  const open = () => {
+    paint(); menu.hidden = false; btn.setAttribute('aria-expanded', 'true'); box.classList.add('open');
+    const cur = menu.querySelector('[aria-selected="true"]') || menu.querySelector('.select-item');
+    if (cur) cur.focus();
+  };
+  btn.onclick = () => (menu.hidden ? open() : close());
+  btn.onkeydown = (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+  };
+  menu.onclick = (e) => {
+    const item = e.target.closest('.select-item');
+    if (!item) return;
+    const o = opts[Number(item.dataset.i)];
+    sel.value = o.v;
+    syncLabel(); close();
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  menu.onkeydown = (e) => {
+    const list = [...menu.querySelectorAll('.select-item')];
+    const at = list.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); (list[at + 1] || list[0]).focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); (list[at - 1] || list[list.length - 1]).focus(); }
+    else if (e.key === 'Escape' || e.key === 'Tab') { e.preventDefault(); close(); btn.focus(); }
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (document.activeElement !== btn) document.activeElement.click(); }
+  };
+  box.onkeydown = (e) => { if (e.key === 'Escape') close(); };
+  syncLabel();
+  sel.addEventListener('change', syncLabel);
+}
+
+function upgradeSelects(root = document) {
+  root.querySelectorAll('select.plain').forEach(upgradeSelect);
+}
+
+document.addEventListener('mousedown', (e) => {
+  document.querySelectorAll('.select.open').forEach(box => {
+    if (!box.contains(e.target)) {
+      box.classList.remove('open');
+      box.querySelector('.select-menu').hidden = true;
+      box.querySelector('.select-btn').setAttribute('aria-expanded', 'false');
+    }
+  });
+});
+
 // ---------- router ----------
+
 async function route() {
   const el = $('#app');
   const hash = location.hash || '#/';
@@ -534,7 +732,11 @@ async function route() {
   const view = VIEWS[name];
   el.innerHTML = '<div class="empty">Loading…</div>';
   if (!view) { VIEWS.notfound(el); renderNav(); return; }
-  try { await view(el, { slug: parts[1], id: parts[2] || parts[1] }, query); }
+  try {
+    await view(el, { slug: parts[1], id: parts[2] || parts[1] }, query);
+    el.querySelectorAll('input[name="q"]').forEach(attachTypeahead);
+    upgradeSelects(el);
+  }
   catch (e) { el.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
   const TITLES = { home: 'The Lecture Database', browse: 'Catalog', lecture: 'Record', batch: 'Batch', course: 'Course',
     subjects: 'Subjects', educator: 'Educator', company: 'Rights holder', docs: 'API', contribute: 'Contribute',
